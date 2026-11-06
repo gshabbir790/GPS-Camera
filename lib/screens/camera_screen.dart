@@ -19,6 +19,7 @@ import '../models/stamp_data.dart';
 import '../services/location_service.dart';
 import '../services/photo_processor.dart';
 import '../widgets/stamp_widget.dart';
+import '../widgets/exit_guard.dart';
 import 'gallery_screen.dart';
 import 'settings_screen.dart';
 import 'template_screen.dart';
@@ -62,6 +63,7 @@ class _CameraScreenState extends State<CameraScreen> with WidgetsBindingObserver
     WidgetsBinding.instance.addObserver(this);
     _appliedQuality = s.quality;
     s.addListener(_onSettings);
+    if (s.manualOn) loc.setManual(s.mLat, s.mLon, title: s.mTitle, address: s.mAddress);
     loc.start();
     _tick = Timer.periodic(const Duration(seconds: 1), (_) {
       if (mounted && !_busy) setState(() => _now = DateTime.now());
@@ -268,6 +270,11 @@ class _CameraScreenState extends State<CameraScreen> with WidgetsBindingObserver
   Future<void> _capture() async {
     final c = _ctrl;
     if (c == null || !c.value.isInitialized || _busy) return;
+    if (!loc.state.value.hasFix) {
+      _toast(S.t('Waiting for GPS location... or set location manually',
+          'GPS لوکیشن کا انتظار کریں... یا لوکیشن دستی سیٹ کریں'));
+      return;
+    }
 
     if (s.timer > 0) {
       for (var i = s.timer; i > 0; i--) {
@@ -397,10 +404,151 @@ class _CameraScreenState extends State<CameraScreen> with WidgetsBindingObserver
     if (r != null) s.update(() => s.note = r.trim());
   }
 
+  // ---------------- لوکیشن ایڈٹ ----------------
+  Widget _locChip() {
+    return ValueListenableBuilder<GeoState>(
+      valueListenable: loc.state,
+      builder: (_, g, __) {
+        Color c;
+        String text;
+        if (g.manual) {
+          c = Colors.lightBlueAccent;
+          text = S.t('Manual location', 'دستی لوکیشن');
+        } else if (!g.hasFix) {
+          c = Colors.grey;
+          text = S.t('Finding GPS...', 'GPS تلاش ہو رہی ہے...');
+        } else {
+          final a = g.accuracy;
+          c = a <= 15 ? Colors.greenAccent : (a <= 50 ? Colors.orangeAccent : Colors.redAccent);
+          text = 'GPS ±${a.round()} m';
+        }
+        return GestureDetector(
+          onTap: _editLocation,
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            decoration: BoxDecoration(
+              color: Colors.black54,
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: c),
+            ),
+            child: Row(mainAxisSize: MainAxisSize.min, children: [
+              Icon(g.manual ? Icons.edit_location_alt : Icons.gps_fixed, size: 14, color: c),
+              const SizedBox(width: 4),
+              Text(text, style: const TextStyle(color: Colors.white, fontSize: 11)),
+              const SizedBox(width: 4),
+              const Icon(Icons.edit, size: 12, color: Colors.white70),
+            ]),
+          ),
+        );
+      },
+    );
+  }
+
+  Future<void> _editLocation() async {
+    final g = loc.state.value;
+    final titleC = TextEditingController(text: g.title);
+    final addrC = TextEditingController(text: g.addressRest);
+    final latC = TextEditingController(text: g.hasFix ? g.lat.toStringAsFixed(6) : '');
+    final lonC = TextEditingController(text: g.hasFix ? g.lon.toStringAsFixed(6) : '');
+    const numKb = TextInputType.numberWithOptions(signed: true, decimal: true);
+
+    await showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(S.t('Edit location', 'لوکیشن ایڈٹ کریں')),
+        content: SingleChildScrollView(
+          child: Column(mainAxisSize: MainAxisSize.min, children: [
+            TextField(
+              controller: titleC,
+              decoration: InputDecoration(
+                labelText: S.t('Place name', 'جگہ کا نام'),
+                hintText: 'GHSS Waryam Wala, Punjab, Pakistan',
+              ),
+            ),
+            TextField(
+              controller: addrC,
+              maxLines: 2,
+              decoration: InputDecoration(labelText: S.t('Address', 'پتہ')),
+            ),
+            Row(children: [
+              Expanded(
+                child: TextField(
+                  controller: latC,
+                  keyboardType: numKb,
+                  decoration: const InputDecoration(labelText: 'Latitude'),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: TextField(
+                  controller: lonC,
+                  keyboardType: numKb,
+                  decoration: const InputDecoration(labelText: 'Longitude'),
+                ),
+              ),
+            ]),
+            const SizedBox(height: 10),
+            OutlinedButton.icon(
+              icon: const Icon(Icons.my_location),
+              label: Text(S.t('Fill from current GPS', 'موجودہ GPS سے بھریں')),
+              onPressed: () {
+                final p = loc.lastPos;
+                if (p == null) {
+                  _toast(S.t('GPS location not available yet', 'GPS لوکیشن ابھی نہیں ملی'));
+                  return;
+                }
+                latC.text = p.latitude.toStringAsFixed(6);
+                lonC.text = p.longitude.toStringAsFixed(6);
+              },
+            ),
+            const SizedBox(height: 6),
+            Text(
+              S.t('Leave place name empty to find it automatically from internet.',
+                  'جگہ کا نام خالی چھوڑیں تو انٹرنیٹ سے خود نکل آئے گا۔'),
+              style: const TextStyle(fontSize: 11, color: Colors.black54),
+            ),
+          ]),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: Text(S.t('Cancel', 'منسوخ'))),
+          TextButton(
+            onPressed: () {
+              s.update(() => s.manualOn = false);
+              loc.clearManual();
+              Navigator.pop(ctx);
+            },
+            child: Text(S.t('Use GPS (auto)', 'GPS (خودکار)')),
+          ),
+          FilledButton(
+            onPressed: () {
+              final lat = double.tryParse(latC.text.trim());
+              final lon = double.tryParse(lonC.text.trim());
+              if (lat == null || lon == null || lat < -90 || lat > 90 || lon < -180 || lon > 180) {
+                _toast(S.t('Enter valid Latitude and Longitude', 'درست Latitude اور Longitude لکھیں'));
+                return;
+              }
+              s.update(() {
+                s.manualOn = true;
+                s.mLat = lat;
+                s.mLon = lon;
+                s.mTitle = titleC.text.trim();
+                s.mAddress = addrC.text.trim();
+              });
+              loc.setManual(lat, lon, title: s.mTitle, address: s.mAddress);
+              Navigator.pop(ctx);
+            },
+            child: Text(S.t('Save', 'محفوظ کریں')),
+          ),
+        ],
+      ),
+    );
+  }
+
   // ---------------- UI ----------------
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
+    return ExitGuard(
+      child: Scaffold(
       backgroundColor: Colors.black,
       body: SafeArea(
         child: Directionality(
@@ -414,6 +562,7 @@ class _CameraScreenState extends State<CameraScreen> with WidgetsBindingObserver
             ],
           ),
         ),
+      ),
       ),
     );
   }
@@ -500,6 +649,7 @@ class _CameraScreenState extends State<CameraScreen> with WidgetsBindingObserver
                   ),
                 ),
                 if (s.grid) const IgnorePointer(child: CustomPaint(painter: _GridPainter())),
+                Positioned(top: 6, left: 6, child: _locChip()),
                 Positioned(
                   left: 0,
                   right: 0,

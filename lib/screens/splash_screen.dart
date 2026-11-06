@@ -5,7 +5,7 @@ import 'package:flutter/material.dart';
 
 import '../l10n/strings.dart';
 import '../widgets/credit_banner.dart';
-import 'camera_screen.dart';
+import 'gate_screen.dart';
 
 /// شروع کی اسپلیش اسکرین (اینیمیشن کے ساتھ)
 class SplashScreen extends StatefulWidget {
@@ -31,7 +31,7 @@ class _SplashScreenState extends State<SplashScreen> with TickerProviderStateMix
       if (!mounted) return;
       Navigator.of(context).pushReplacement(PageRouteBuilder(
         transitionDuration: const Duration(milliseconds: 600),
-        pageBuilder: (_, __, ___) => const CameraScreen(),
+        pageBuilder: (_, __, ___) => const GateScreen(),
         transitionsBuilder: (_, a, __, child) => FadeTransition(opacity: a, child: child),
       ));
     });
