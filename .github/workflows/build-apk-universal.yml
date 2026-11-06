@@ -38,7 +38,7 @@ jobs:
           cp -r /tmp/scaffold/android ./android
           cp android_overrides/AndroidManifest.xml android/app/src/main/AndroidManifest.xml
 
-      - name: Force Android compileSdk 36 for all modules
+      - name: Force Android compileSdk and targetSdk 36 for all modules
         run: |
           cat >> android/build.gradle <<'EOF'
 
@@ -46,11 +46,15 @@ jobs:
               afterEvaluate { project ->
                   def androidExtension = project.extensions.findByName("android")
                   if (androidExtension != null) {
-                      androidExtension.compileSdkVersion(36)
+                      androidExtension.compileSdk = 36
+                      if (androidExtension.hasProperty('defaultConfig') && androidExtension.defaultConfig != null) {
+                          androidExtension.defaultConfig.targetSdk = 36
+                      }
                   }
               }
           }
           EOF
+
 
       - name: Configure consistent debug signing
         run: |
