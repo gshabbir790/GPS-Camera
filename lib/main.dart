@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+
+import 'l10n/strings.dart';
 import 'models/app_settings.dart';
-import 'screens/camera_screen.dart';
+import 'screens/splash_screen.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -15,18 +17,23 @@ class GpsCameraApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'GPS Camera',
-      debugShowCheckedModeBanner: false,
-      theme: ThemeData(
-        useMaterial3: true,
-        colorSchemeSeed: const Color(0xFFFFC400),
-        // انگریزی کے لیے ڈیفالٹ فونٹ، اردو حروف کے لیے نستعلیق
-        fontFamilyFallback: const ['NotoNastaliqUrdu'],
+    return ListenableBuilder(
+      listenable: AppSettings.instance,
+      builder: (context, _) => MaterialApp(
+        title: 'GPS Camera',
+        debugShowCheckedModeBanner: false,
+        theme: ThemeData(
+          useMaterial3: true,
+          colorSchemeSeed: const Color(0xFFFFC400),
+          // اردو حروف کے لیے نستعلیق فونٹ
+          fontFamilyFallback: const ['NotoNastaliqUrdu'],
+        ),
+        builder: (context, child) => Directionality(
+          textDirection: S.ur ? TextDirection.rtl : TextDirection.ltr,
+          child: child!,
+        ),
+        home: const SplashScreen(),
       ),
-      builder: (context, child) =>
-          Directionality(textDirection: TextDirection.rtl, child: child!),
-      home: const CameraScreen(),
     );
   }
 }
