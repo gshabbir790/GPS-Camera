@@ -55,7 +55,6 @@ jobs:
           }
           EOF
 
-
       - name: Configure consistent debug signing
         run: |
           mkdir -p ~/.android
