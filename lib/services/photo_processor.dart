@@ -26,7 +26,7 @@ class ProcessArgs {
 /// الگ isolate میں چلتا ہے (compute کے ذریعے): کراپ + سائز + اسٹیمپ + JPG محفوظ
 Future<String> processPhoto(ProcessArgs a) async {
   var im = img.decodeJpg(File(a.srcPath).readAsBytesSync());
-  if (im == null) throw Exception('تصویر نہیں کھل سکی');
+  if (im == null) throw Exception('Could not open photo');
   im = img.bakeOrientation(im);
 
   // مطلوبہ ریشو پر کراپ

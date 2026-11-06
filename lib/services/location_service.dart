@@ -32,7 +32,7 @@ class GeoState {
     this.tile,
     this.fx = .5,
     this.fy = .5,
-    this.status = 'لوکیشن تلاش ہو رہی ہے...',
+    this.status = 'searching',
   });
 
   GeoState copyWith({
@@ -92,7 +92,7 @@ class LocationService {
 
   Future<void> start() async {
     if (!await Geolocator.isLocationServiceEnabled()) {
-      state.value = state.value.copyWith(status: 'فون کی لوکیشن (GPS) آن کریں');
+      state.value = state.value.copyWith(status: 'gps_off');
       return;
     }
     var perm = await Geolocator.checkPermission();
@@ -101,7 +101,7 @@ class LocationService {
     }
     if (perm == LocationPermission.denied ||
         perm == LocationPermission.deniedForever) {
-      state.value = state.value.copyWith(status: 'لوکیشن کی اجازت دیں (Settings → Apps)');
+      state.value = state.value.copyWith(status: 'no_perm');
       return;
     }
     try {
