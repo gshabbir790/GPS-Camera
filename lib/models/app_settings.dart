@@ -34,6 +34,11 @@ class AppSettings extends ChangeNotifier {
   bool nameLatLng = false;
   int seq = 1;
 
+  // دستی لوکیشن
+  bool manualOn = false;
+  double mLat = 0, mLon = 0;
+  String mTitle = '', mAddress = '';
+
   // سٹوریج / شیئر
   bool saveGallery = true;
   bool saveOriginal = false;
@@ -50,6 +55,11 @@ class AppSettings extends ChangeNotifier {
 
   Future<void> load() async {
     final p = _p = await SharedPreferences.getInstance();
+    manualOn = p.getBool('manualOn') ?? manualOn;
+    mLat = p.getDouble('mLat') ?? mLat;
+    mLon = p.getDouble('mLon') ?? mLon;
+    mTitle = p.getString('mTitle') ?? mTitle;
+    mAddress = p.getString('mAddress') ?? mAddress;
     lang = p.getString('lang') ?? lang;
     S.lang = lang;
     quality = p.getInt('quality') ?? quality;
@@ -84,6 +94,11 @@ class AppSettings extends ChangeNotifier {
   Future<void> _save() async {
     final p = _p;
     if (p == null) return;
+    await p.setBool('manualOn', manualOn);
+    await p.setDouble('mLat', mLat);
+    await p.setDouble('mLon', mLon);
+    await p.setString('mTitle', mTitle);
+    await p.setString('mAddress', mAddress);
     await p.setString('lang', lang);
     await p.setInt('quality', quality);
     await p.setInt('ratio', ratio);
