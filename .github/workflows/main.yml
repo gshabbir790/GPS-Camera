@@ -164,10 +164,28 @@ jobs:
                       )
                       updated_files.append(gradle_file)
 
-          if not updated_files:
+          # پہلے سے 36 ہو (cache کی وجہ سے) تو بھی ٹھیک ہے
+          all_lines = []
+          for plugin_dir in plugin_dirs:
+              for gradle_file in (
+                  plugin_dir / "android"
+              ).glob("build.gradle*"):
+                  for line in gradle_file.read_text(
+                      encoding="utf-8"
+                  ).splitlines():
+                      if re.match(r"\s*compileSdk", line):
+                          all_lines.append(line.strip())
+
+          if not all_lines:
               sys.exit(
-                  "ERROR: Could not update geocoding_android "
-                  "compileSdk. Check its Gradle configuration."
+                  "ERROR: No compileSdk line found in "
+                  "geocoding_android Gradle files."
+              )
+
+          bad = [l for l in all_lines if "36" not in l]
+          if bad:
+              sys.exit(
+                  "ERROR: compileSdk is not 36: " + str(bad)
               )
 
           print("Successfully updated:")
