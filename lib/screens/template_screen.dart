@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../l10n/strings.dart';
 
 import '../models/app_settings.dart';
 import '../models/stamp_data.dart';
@@ -27,12 +28,12 @@ class TemplateScreen extends StatelessWidget {
     );
 
     return Scaffold(
-      appBar: AppBar(title: const Text('ٹیمپلیٹ')),
+      appBar: AppBar(title: Text(S.t('Template', 'ٹیمپلیٹ'))),
       body: ListenableBuilder(
         listenable: s,
         builder: (context, _) => ListView.separated(
           padding: const EdgeInsets.all(12),
-          itemCount: kTemplateNames.length,
+          itemCount: kTemplateCount,
           separatorBuilder: (_, __) => const SizedBox(height: 14),
           itemBuilder: (context, i) {
             final sel = s.template == i;
@@ -56,7 +57,7 @@ class TemplateScreen extends StatelessWidget {
                     Padding(
                       padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
                       child: Row(children: [
-                        Text(kTemplateNames[i],
+                        Text(templateName(i),
                             style: const TextStyle(
                                 color: Colors.white, fontWeight: FontWeight.bold)),
                         const Spacer(),

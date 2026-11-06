@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import '../l10n/strings.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 
@@ -41,11 +42,11 @@ class _GalleryScreenState extends State<GalleryScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: Text('سٹوریج (${_files.length})')),
+      appBar: AppBar(title: Text(S.t('Storage (${_files.length})', 'سٹوریج (${_files.length})'))),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : _files.isEmpty
-              ? const Center(child: Text('ابھی کوئی تصویر نہیں'))
+              ? Center(child: Text(S.t('No photos yet', 'ابھی کوئی تصویر نہیں')))
               : GridView.builder(
                   padding: const EdgeInsets.all(4),
                   gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
@@ -96,13 +97,13 @@ class _Viewer extends StatelessWidget {
               final ok = await showDialog<bool>(
                 context: context,
                 builder: (ctx) => AlertDialog(
-                  title: const Text('تصویر حذف کریں؟'),
-                  content: const Text('گیلری والی کاپی حذف نہیں ہوگی۔'),
+                  title: Text(S.t('Delete photo?', 'تصویر حذف کریں؟')),
+                  content: Text(S.t('The gallery copy will not be deleted.', 'گیلری والی کاپی حذف نہیں ہوگی۔')),
                   actions: [
                     TextButton(
-                        onPressed: () => Navigator.pop(ctx, false), child: const Text('نہیں')),
+                        onPressed: () => Navigator.pop(ctx, false), child: Text(S.t('No', 'نہیں'))),
                     FilledButton(
-                        onPressed: () => Navigator.pop(ctx, true), child: const Text('حذف')),
+                        onPressed: () => Navigator.pop(ctx, true), child: Text(S.t('Delete', 'حذف'))),
                   ],
                 ),
               );

@@ -13,6 +13,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:sensors_plus/sensors_plus.dart';
 import 'package:share_plus/share_plus.dart';
 
+import '../l10n/strings.dart';
 import '../models/app_settings.dart';
 import '../models/stamp_data.dart';
 import '../services/location_service.dart';
@@ -110,7 +111,7 @@ class _CameraScreenState extends State<CameraScreen> with WidgetsBindingObserver
     try {
       if (_cams.isEmpty) _cams = await availableCameras();
       if (_cams.isEmpty) {
-        if (mounted) setState(() => _error = 'اس فون پر کیمرہ نہیں ملا');
+        if (mounted) setState(() => _error = S.t('No camera found on this phone', 'اس فون پر کیمرہ نہیں ملا'));
         return;
       }
       final dir = _front ? CameraLensDirection.front : CameraLensDirection.back;
@@ -150,7 +151,7 @@ class _CameraScreenState extends State<CameraScreen> with WidgetsBindingObserver
     } on CameraException catch (e) {
       if (mounted) {
         setState(() => _error = (e.code.contains('Denied'))
-            ? 'کیمرے کی اجازت دیں (Settings → Apps → GPS Camera)'
+            ? S.t('Allow camera permission (Settings → Apps → GPS Camera)', 'کیمرے کی اجازت دیں (Settings → Apps → GPS Camera)')
             : (e.description ?? e.code));
       }
     } catch (e) {
@@ -231,11 +232,22 @@ class _CameraScreenState extends State<CameraScreen> with WidgetsBindingObserver
     if (mounted && !_busy) setState(() {});
   }
 
+  String _statusText(String code) {
+    switch (code) {
+      case 'gps_off':
+        return S.t('Turn on phone location (GPS)', 'فون کی لوکیشن (GPS) آن کریں');
+      case 'no_perm':
+        return S.t('Allow location permission', 'لوکیشن کی اجازت دیں');
+      default:
+        return S.t('Finding location...', 'لوکیشن تلاش ہو رہی ہے...');
+    }
+  }
+
   // ---------------- اسٹیمپ ڈیٹا ----------------
   StampData _stampData(GeoState g) {
     final hasFix = g.hasFix;
     return StampData(
-      title: g.title.isNotEmpty ? g.title : (hasFix ? '' : g.status),
+      title: g.title.isNotEmpty ? g.title : (hasFix ? '' : _statusText(g.status)),
       address: g.fullAddress,
       latLon: hasFix ? g.latLonText : '',
       dateLine: StampData.fullLine(_now),
@@ -285,7 +297,7 @@ class _CameraScreenState extends State<CameraScreen> with WidgetsBindingObserver
       final ui.Image stampImg =
           await boundary.toImage(pixelRatio: maxW / boundary.size.width);
       final bd = await stampImg.toByteData(format: ui.ImageByteFormat.png);
-      if (bd == null) throw Exception('اسٹیمپ نہیں بن سکا');
+      if (bd == null) throw Exception(S.t('Could not create stamp', 'اسٹیمپ نہیں بن سکا'));
       final stampPng = bd.buffer.asUint8List();
 
       final g = loc.state.value;
@@ -323,19 +335,19 @@ class _CameraScreenState extends State<CameraScreen> with WidgetsBindingObserver
           await Gal.putImage(outPath, album: 'GPS Camera');
           if (s.saveOriginal) await Gal.putImage(srcPath, album: 'GPS Camera');
         } catch (_) {
-          _toast('گیلری میں محفوظ نہیں ہو سکی - اجازت چیک کریں');
+          _toast(S.t('Could not save to gallery - check permission', 'گیلری میں محفوظ نہیں ہو سکی - اجازت چیک کریں'));
         }
       }
 
       s.update(() => s.seq++);
       if (mounted) setState(() => _lastPhoto = outPath);
-      _toast('تصویر محفوظ ہو گئی ✓');
+      _toast(S.t('Photo saved ✓', 'تصویر محفوظ ہو گئی ✓'));
 
       if (s.shareAfter) {
         await Share.shareXFiles([XFile(outPath)]);
       }
     } catch (e) {
-      _toast('خرابی: $e');
+      _toast(S.t('Error: $e', 'خرابی: $e'));
     } finally {
       if (srcPath != null && !s.saveOriginal) {
         try {
@@ -369,7 +381,7 @@ class _CameraScreenState extends State<CameraScreen> with WidgetsBindingObserver
     final r = await showDialog<String>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('نوٹ / ٹیکسٹ لکھیں'),
+        title: Text(S.t('Write note / text', 'نوٹ / ٹیکسٹ لکھیں')),
         content: TextField(
           controller: tc,
           autofocus: true,
@@ -377,8 +389,8 @@ class _CameraScreenState extends State<CameraScreen> with WidgetsBindingObserver
           decoration: const InputDecoration(hintText: 'Note'),
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('منسوخ')),
-          FilledButton(onPressed: () => Navigator.pop(ctx, tc.text), child: const Text('ٹھیک ہے')),
+          TextButton(onPressed: () => Navigator.pop(ctx), child: Text(S.t('Cancel', 'منسوخ'))),
+          FilledButton(onPressed: () => Navigator.pop(ctx, tc.text), child: Text(S.t('OK', 'ٹھیک ہے'))),
         ],
       ),
     );
@@ -577,7 +589,7 @@ class _CameraScreenState extends State<CameraScreen> with WidgetsBindingObserver
                     ? Image.file(File(_lastPhoto!), fit: BoxFit.cover, cacheWidth: 150)
                     : const Icon(Icons.photo_library, color: Colors.white70),
               ),
-              const Text('سٹوریج', style: TextStyle(color: Colors.white70, fontSize: 11)),
+              Text(S.t('Storage', 'سٹوریج'), style: TextStyle(color: Colors.white70, fontSize: 11)),
             ]),
           ),
           // شٹر
@@ -603,10 +615,10 @@ class _CameraScreenState extends State<CameraScreen> with WidgetsBindingObserver
           GestureDetector(
             onTap: () => Navigator.push(
                 context, MaterialPageRoute(builder: (_) => const TemplateScreen())),
-            child: const Column(mainAxisSize: MainAxisSize.min, children: [
-              Icon(Icons.dashboard_customize, color: Colors.white, size: 34),
-              SizedBox(height: 4),
-              Text('ٹیمپلیٹ', style: TextStyle(color: Colors.white70, fontSize: 11)),
+            child: Column(mainAxisSize: MainAxisSize.min, children: [
+              const Icon(Icons.dashboard_customize, color: Colors.white, size: 34),
+              const SizedBox(height: 4),
+              Text(S.t('Template', 'ٹیمپلیٹ'), style: TextStyle(color: Colors.white70, fontSize: 11)),
             ]),
           ),
         ],
