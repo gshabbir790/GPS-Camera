@@ -1,0 +1,122 @@
+import 'dart:io';
+
+import 'package:flutter/material.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:share_plus/share_plus.dart';
+
+/// ایپ میں محفوظ تصاویر (سٹوریج)
+class GalleryScreen extends StatefulWidget {
+  const GalleryScreen({super.key});
+
+  @override
+  State<GalleryScreen> createState() => _GalleryScreenState();
+}
+
+class _GalleryScreenState extends State<GalleryScreen> {
+  List<File> _files = [];
+  bool _loading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    final docs = await getApplicationDocumentsDirectory();
+    final dir = Directory('${docs.path}/photos');
+    var list = <File>[];
+    if (dir.existsSync()) {
+      list = dir.listSync().whereType<File>().where((f) => f.path.endsWith('.jpg')).toList()
+        ..sort((a, b) => b.lastModifiedSync().compareTo(a.lastModifiedSync()));
+    }
+    if (mounted) {
+      setState(() {
+        _files = list;
+        _loading = false;
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: Text('سٹوریج (${_files.length})')),
+      body: _loading
+          ? const Center(child: CircularProgressIndicator())
+          : _files.isEmpty
+              ? const Center(child: Text('ابھی کوئی تصویر نہیں'))
+              : GridView.builder(
+                  padding: const EdgeInsets.all(4),
+                  gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                    crossAxisCount: 3,
+                    mainAxisSpacing: 4,
+                    crossAxisSpacing: 4,
+                  ),
+                  itemCount: _files.length,
+                  itemBuilder: (context, i) => GestureDetector(
+                    onTap: () async {
+                      await Navigator.push(
+                        context,
+                        MaterialPageRoute(builder: (_) => _Viewer(file: _files[i])),
+                      );
+                      _load();
+                    },
+                    child: Image.file(_files[i], fit: BoxFit.cover, cacheWidth: 300),
+                  ),
+                ),
+    );
+  }
+}
+
+class _Viewer extends StatelessWidget {
+  final File file;
+  const _Viewer({required this.file});
+
+  @override
+  Widget build(BuildContext context) {
+    final name = file.path.split('/').last;
+    return Scaffold(
+      backgroundColor: Colors.black,
+      appBar: AppBar(
+        backgroundColor: Colors.black,
+        foregroundColor: Colors.white,
+        title: Directionality(
+          textDirection: TextDirection.ltr,
+          child: Text(name, style: const TextStyle(fontSize: 13)),
+        ),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.share),
+            onPressed: () => Share.shareXFiles([XFile(file.path)]),
+          ),
+          IconButton(
+            icon: const Icon(Icons.delete),
+            onPressed: () async {
+              final ok = await showDialog<bool>(
+                context: context,
+                builder: (ctx) => AlertDialog(
+                  title: const Text('تصویر حذف کریں؟'),
+                  content: const Text('گیلری والی کاپی حذف نہیں ہوگی۔'),
+                  actions: [
+                    TextButton(
+                        onPressed: () => Navigator.pop(ctx, false), child: const Text('نہیں')),
+                    FilledButton(
+                        onPressed: () => Navigator.pop(ctx, true), child: const Text('حذف')),
+                  ],
+                ),
+              );
+              if (ok == true) {
+                try {
+                  file.deleteSync();
+                } catch (_) {}
+                if (context.mounted) Navigator.pop(context);
+              }
+            },
+          ),
+        ],
+      ),
+      body: Center(child: InteractiveViewer(child: Image.file(file))),
+    );
+  }
+}
