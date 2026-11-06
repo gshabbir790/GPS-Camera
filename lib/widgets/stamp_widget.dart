@@ -3,15 +3,18 @@ import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 
+import '../l10n/strings.dart';
 import '../models/stamp_data.dart';
 
-const kTemplateNames = [
-  'ایڈوانس ٹیمپلیٹ',
-  'تاریخ و وقت ٹیمپلیٹ',
-  'رپورٹنگ ٹیمپلیٹ',
-  'کمپاس ٹیمپلیٹ',
-  'اسکین لوکیشن ٹیمپلیٹ',
-];
+String templateName(int i) => [
+      S.t('Advance Template', 'ایڈوانس ٹیمپلیٹ'),
+      S.t('DateTime Template', 'تاریخ و وقت ٹیمپلیٹ'),
+      S.t('Reporting Template', 'رپورٹنگ ٹیمپلیٹ'),
+      S.t('Compass Template', 'کمپاس ٹیمپلیٹ'),
+      S.t('Scan Location Template', 'اسکین لوکیشن ٹیمپلیٹ'),
+    ][i];
+
+const kTemplateCount = 5;
 
 /// تصویر کے نیچے لگنے والا اسٹیمپ۔ پریویو اور اصل تصویر دونوں میں یہی ویجٹ استعمال ہوتا ہے۔
 class StampWidget extends StatelessWidget {
