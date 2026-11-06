@@ -1,4 +1,5 @@
-name: Build APK
+
+name: Build GPS Camera Universal APK
 
 on:
   push:
@@ -11,73 +12,261 @@ permissions:
 
 jobs:
   build:
+    name: Build Universal APK
     runs-on: ubuntu-latest
-    timeout-minutes: 40
-    steps:
-      - uses: actions/checkout@v4
+    timeout-minutes: 45
 
-      - uses: actions/setup-java@v4
+    steps:
+      # 1. Download repository
+      - name: Checkout source code
+        uses: actions/checkout@v4
+
+      # 2. Java setup
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: '17'
 
-      - uses: subosito/flutter-action@v2
+      # 3. Flutter setup
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
         with:
           channel: stable
           cache: true
 
-      - name: Android فولڈر خودکار بنائیں (تازہ ترین Flutter کے مطابق)
+      # 4. Generate fresh Android project
+      - name: Generate Android project
+        shell: bash
         run: |
-          flutter create --platforms=android --org com.hassan --project-name gps_camera --no-pub /tmp/scaffold
+          set -euo pipefail
+
+          flutter create \
+            --platforms=android \
+            --org com.hassan \
+            --project-name gps_camera \
+            --no-pub \
+            /tmp/gps-camera-scaffold
+
           rm -rf android
-          cp -r /tmp/scaffold/android ./android
-          cp android_overrides/AndroidManifest.xml android/app/src/main/AndroidManifest.xml
+          cp -R /tmp/gps-camera-scaffold/android ./android
 
-      - name: ہر بار ایک ہی سائننگ کی (تاکہ نیا APK پرانی ایپ کے اوپر انسٹال ہو سکے)
+          mkdir -p android/app/src/main
+
+          cp android_overrides/AndroidManifest.xml \
+            android/app/src/main/AndroidManifest.xml
+
+      # 5. Install Android SDK 36
+      - name: Install Android SDK Platform 36
+        shell: bash
         run: |
-          mkdir -p ~/.android
-          cp ci/debug.keystore ~/.android/debug.keystore
+          set -euo pipefail
 
-      - run: flutter pub get
+          SDKMANAGER="${ANDROID_HOME}/cmdline-tools/latest/bin/sdkmanager"
 
-      - name: Dart کوڈ کی جانچ (ایرر یہاں صاف نظر آئیں گے)
-        run: flutter analyze --no-pub --no-fatal-infos --no-fatal-warnings || true
+          if [ ! -x "$SDKMANAGER" ]; then
+            SDKMANAGER="$(find "${ANDROID_HOME}/cmdline-tools" \
+              -name sdkmanager -type f | head -n 1)"
+          fi
 
-      - name: آئیکن بنائیں
+          test -x "$SDKMANAGER"
+
+          yes | "$SDKMANAGER" --licenses >/dev/null || true
+
+          "$SDKMANAGER" "platforms;android-36"
+
+      # 6. Keep signing key consistent
+      - name: Configure signing key
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          mkdir -p "$HOME/.android"
+
+          test -f ci/debug.keystore
+
+          cp ci/debug.keystore \
+            "$HOME/.android/debug.keystore"
+
+      # 7. Download Flutter packages
+      - name: Get Flutter dependencies
+        run: flutter pub get
+
+      # 8. FIX: geocoding_android compileSdk 33 -> 36
+      - name: Fix Android compileSdk 36
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+          import sys
+
+          pub_cache = (
+              Path.home()
+              / ".pub-cache"
+              / "hosted"
+              / "pub.dev"
+          )
+
+          plugin_dirs = list(
+              pub_cache.glob("geocoding_android-*")
+          )
+
+          if not plugin_dirs:
+              sys.exit(
+                  "ERROR: geocoding_android package not found."
+              )
+
+          updated_files = []
+
+          patterns = [
+              re.compile(
+                  r"(?m)^(\s*compileSdkVersion\s+)"
+                  r"([^\s]+)(.*)$"
+              ),
+              re.compile(
+                  r"(?m)^(\s*compileSdkVersion\s*=\s*)"
+                  r"([^\s]+)(.*)$"
+              ),
+              re.compile(
+                  r"(?m)^(\s*compileSdk\s*=\s*)"
+                  r"([^\s]+)(.*)$"
+              ),
+              re.compile(
+                  r"(?m)^(\s*compileSdk\s+)"
+                  r"([^\s]+)(.*)$"
+              ),
+          ]
+
+          for plugin_dir in plugin_dirs:
+              android_dir = plugin_dir / "android"
+
+              for gradle_file in android_dir.glob("build.gradle*"):
+                  original = gradle_file.read_text(
+                      encoding="utf-8"
+                  )
+
+                  updated = original
+
+                  for pattern in patterns:
+                      updated = pattern.sub(
+                          lambda match:
+                              match.group(1) + "36" + match.group(3),
+                          updated
+                      )
+
+                  if updated != original:
+                      gradle_file.write_text(
+                          updated,
+                          encoding="utf-8"
+                      )
+                      updated_files.append(gradle_file)
+
+          if not updated_files:
+              sys.exit(
+                  "ERROR: Could not update geocoding_android "
+                  "compileSdk. Check its Gradle configuration."
+              )
+
+          print("Successfully updated:")
+          for path in updated_files:
+              print(f"  {path}")
+
+          print("\nVerification:")
+          for plugin_dir in plugin_dirs:
+              for gradle_file in (
+                  plugin_dir / "android"
+              ).glob("build.gradle*"):
+                  for line in gradle_file.read_text(
+                      encoding="utf-8"
+                  ).splitlines():
+                      if "compileSdk" in line:
+                          print(line.strip())
+
+          PY
+
+      # 9. Verify Android configuration
+      - name: Verify Android SDK configuration
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          echo "Installed Android platforms:"
+          ls -1 "$ANDROID_HOME/platforms"
+
+          echo "geocoding_android compileSdk:"
+          grep -nE 'compileSdk(Version)?' \
+            "$HOME"/.pub-cache/hosted/pub.dev/geocoding_android-*/android/build.gradle*
+
+      # 10. Dart analysis (diagnostic only)
+      - name: Analyze Dart code
+        shell: bash
+        run: |
+          set +e
+
+          flutter analyze --no-pub \
+            --no-fatal-infos \
+            --no-fatal-warnings \
+            2>&1 | tee analyze.log
+
+          exit 0
+
+      # 11. Generate launcher icon
+      - name: Generate app icon
         run: dart run flutter_launcher_icons
 
-      - name: APK بنائیں (صرف arm64 - تقریباً سب نئے فونز، سب سے چھوٹا سائز)
+      # 12. Build ONE universal APK
+      - name: Build Universal APK
+        shell: bash
         run: |
           set -o pipefail
+
           flutter build apk --release \
-            --target-platform android-arm64 \
-            --obfuscate --split-debug-info=build/symbols 2>&1 | tee build.log
+            --target-platform android-arm,android-arm64,android-x64 \
+            --obfuscate \
+            --split-debug-info=build/symbols \
+            2>&1 | tee build.log
 
-      - name: ناکامی کی صورت میں صرف ایرر کی لائنیں دکھائیں
-        if: failure()
+      # 13. Rename APK
+      - name: Prepare APK
+        shell: bash
         run: |
-          echo "=========== ERROR SUMMARY (یہی لائنیں کاپی کر کے بھیجیں) ==========="
-          grep -nE "Error|error:|FAILURE|What went wrong|Execution failed|Caused by|\.dart:[0-9]+" -A4 build.log | grep -v "Downloading\|Fetch remote\|Computing" | head -120
+          set -euo pipefail
 
-      - uses: actions/upload-artifact@v4
+          mkdir -p artifacts
+
+          cp build/app/outputs/flutter-apk/app-release.apk \
+            artifacts/GPS-Camera-Universal.apk
+
+          echo "APK successfully generated:"
+          ls -lh artifacts/GPS-Camera-Universal.apk
+
+      # 14. Upload APK
+      - name: Upload Universal APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: GPS-Camera-Universal-APK
+          path: artifacts/GPS-Camera-Universal.apk
+          if-no-files-found: error
+          retention-days: 30
+
+      # 15. Upload logs if build fails
+      - name: Upload build logs on failure
         if: failure()
+        uses: actions/upload-artifact@v4
         with:
-          name: build-log
-          path: build.log
+          name: GPS-Camera-Build-Logs
+          path: |
+            build.log
+            analyze.log
+          if-no-files-found: ignore
+          retention-days: 7
 
-      - name: APK کا نام درست کریں
-        run: |
-          cd build/app/outputs/flutter-apk
-          mv app-release.apk GPS-Camera.apk
-          ls -lh *.apk
-
-      - uses: actions/upload-artifact@v4
-        with:
-          name: GPS-Camera-APK
-          path: build/app/outputs/flutter-apk/*.apk
-
-      - name: Release پر بھی ڈال دیں (جب tag v1.0.0 جیسا ہو)
+      # 16. Publish GitHub release
+      - name: Publish GitHub Release
         if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v2
         with:
-          files: build/app/outputs/flutter-apk/*.apk
+          files: artifacts/GPS-Camera-Universal.apk
