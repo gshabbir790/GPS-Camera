@@ -1,12 +1,16 @@
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../l10n/strings.dart';
+
 /// ایپ کی تمام سیٹنگز (فون میں محفوظ رہتی ہیں)
 class AppSettings extends ChangeNotifier {
   AppSettings._();
   static final AppSettings instance = AppSettings._();
 
   SharedPreferences? _p;
+
+  String lang = 'en'; // 'en' یا 'ur'
 
   // کیمرہ
   int quality = 0; // 0 High, 1 Medium, 2 Low
@@ -37,7 +41,8 @@ class AppSettings extends ChangeNotifier {
 
   static const ratioValues = [3 / 4, 9 / 16, 1.0]; // چوڑائی / اونچائی (پورٹریٹ)
   static const ratioLabels = ['4:3', '16:9', '1:1'];
-  static const qualityLabels = ['ہائی', 'درمیانی', 'کم'];
+  static List<String> get qualityLabels =>
+      [S.t('High', 'ہائی'), S.t('Medium', 'درمیانی'), S.t('Low', 'کم')];
   static const maxWidths = [2160, 1600, 1080];
   static const jpgQuality = [92, 85, 75];
 
@@ -45,6 +50,8 @@ class AppSettings extends ChangeNotifier {
 
   Future<void> load() async {
     final p = _p = await SharedPreferences.getInstance();
+    lang = p.getString('lang') ?? lang;
+    S.lang = lang;
     quality = p.getInt('quality') ?? quality;
     ratio = p.getInt('ratio') ?? ratio;
     grid = p.getBool('grid') ?? grid;
@@ -69,6 +76,7 @@ class AppSettings extends ChangeNotifier {
   /// کوئی بھی سیٹنگ بدلنے کے لیے: s.update(() => s.grid = true);
   void update(VoidCallback change) {
     change();
+    S.lang = lang;
     _save();
     notifyListeners();
   }
@@ -76,6 +84,7 @@ class AppSettings extends ChangeNotifier {
   Future<void> _save() async {
     final p = _p;
     if (p == null) return;
+    await p.setString('lang', lang);
     await p.setInt('quality', quality);
     await p.setInt('ratio', ratio);
     await p.setBool('grid', grid);
