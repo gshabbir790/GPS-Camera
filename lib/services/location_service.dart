@@ -16,7 +16,8 @@ class GeoState {
   final String addressRest; // Plus Code کے بغیر باقی پتہ
   final String plusCode;
   final String flag;
-  final Uint8List? tile; // سیٹلائٹ نقشے کا ٹکڑا
+  final Uint8List? tile; // نقشے کا ٹکڑا
+  final Uint8List? overlay; // ہائبرڈ میں ناموں کی پرت
   final double fx, fy; // ٹکڑے کے اندر پوائنٹ کی جگہ (0..1)
   final String status; // خرابی / انتظار کا پیغام
   final double accuracy; // میٹر میں (GPS)
@@ -32,6 +33,7 @@ class GeoState {
     this.plusCode = '',
     this.flag = '',
     this.tile,
+    this.overlay,
     this.fx = .5,
     this.fy = .5,
     this.status = 'searching',
@@ -49,6 +51,7 @@ class GeoState {
     String? plusCode,
     String? flag,
     Uint8List? tile,
+    Uint8List? overlay,
     double? fx,
     double? fy,
     String? status,
@@ -66,6 +69,7 @@ class GeoState {
         plusCode: plusCode ?? this.plusCode,
         flag: flag ?? this.flag,
         tile: clearTile ? null : (tile ?? this.tile),
+        overlay: clearTile ? null : (overlay ?? this.overlay),
         fx: fx ?? this.fx,
         fy: fy ?? this.fy,
         status: status ?? this.status,
@@ -98,6 +102,7 @@ class LocationService {
   String? _tileKey;
   bool _tileBusy = false;
   Position? _lastPos;
+  int mapType = 1;
   bool _manual = false;
   double? _lastAcc;
   DateTime _lastAccept = DateTime.fromMillisecondsSinceEpoch(0);
@@ -338,7 +343,7 @@ class LocationService {
   }
 
   void _maybeTile(({int x, int y, double fx, double fy}) t) {
-    final key = '${t.x}_${t.y}';
+    final key = '${mapType}_${t.x}_${t.y}';
     if (_tileBusy) return;
     if (key == _tileKey && state.value.tile != null) return;
     if (DateTime.now().difference(_lastTileTry).inSeconds < 15 &&
@@ -349,16 +354,44 @@ class LocationService {
     _fetchTile(t.x, t.y, key);
   }
 
+  static const _esri = 'https://server.arcgisonline.com/ArcGIS/rest/services';
+
+  String _tileUrl(int x, int y) {
+    switch (mapType) {
+      case 0:
+        return 'https://tile.openstreetmap.org/$_zoom/$x/$y.png';
+      case 2:
+        return '$_esri/World_Topo_Map/MapServer/tile/$_zoom/$y/$x';
+      default:
+        return '$_esri/World_Imagery/MapServer/tile/$_zoom/$y/$x';
+    }
+  }
+
+  /// نقشے کی قسم بدلیں (Normal / Satellite / Terrain / Hybrid)
+  void setMapType(int type) {
+    if (type == mapType) return;
+    mapType = type;
+    _tileKey = null;
+    state.value = state.value.copyWith(clearTile: true);
+    final s = state.value;
+    if (s.hasFix) _maybeTile(_tileCoords(s.lat, s.lon));
+  }
+
   Future<void> _fetchTile(int x, int y, String key) async {
     _tileBusy = true;
     _lastTileTry = DateTime.now();
     _tileKey = key;
     try {
-      final b = await _httpGet(
-          'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/$_zoom/$y/$x');
-      // اگر اس دوران لوکیشن بدل گئی (دستی ایڈٹ) تو پرانا ٹکڑا نظر انداز
+      final futures = <Future<Uint8List?>>[_httpGet(_tileUrl(x, y))];
+      if (mapType == 3) {
+        futures.add(_httpGet('$_esri/Reference/World_Boundaries_and_Places/MapServer/tile/$_zoom/$y/$x'));
+      }
+      final res = await Future.wait(futures);
+      final b = res[0];
+      final o = res.length > 1 ? res[1] : null;
+      // اگر اس دوران لوکیشن/نقشے کی قسم بدل گئی تو پرانا ٹکڑا نظر انداز
       if (_tileKey == key && b != null && b.isNotEmpty) {
-        state.value = state.value.copyWith(tile: b);
+        state.value = state.value.copyWith(tile: b, overlay: o);
       }
     } finally {
       _tileBusy = false;
