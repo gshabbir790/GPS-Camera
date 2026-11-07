@@ -75,16 +75,21 @@ class StampWidget extends StatelessWidget {
   Widget _logo() => Align(
         alignment: Alignment.centerRight,
         child: Container(
-          margin: const EdgeInsets.only(bottom: 2),
-          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+          margin: const EdgeInsets.only(bottom: 3),
+          padding: const EdgeInsets.fromLTRB(4, 3, 8, 3),
           decoration: BoxDecoration(
             color: Colors.black54,
-            borderRadius: BorderRadius.circular(4),
+            borderRadius: BorderRadius.circular(6),
           ),
-          child: const Row(mainAxisSize: MainAxisSize.min, children: [
-            Icon(Icons.photo_camera, size: 11, color: Color(0xFFFFC400)),
-            SizedBox(width: 3),
-            Text('GPS Map Camera', style: TextStyle(fontSize: 9, color: Colors.white)),
+          child: Row(mainAxisSize: MainAxisSize.min, children: [
+            ClipRRect(
+              borderRadius: BorderRadius.circular(4),
+              child: Image.asset('assets/icon/icon.png', width: 18, height: 18, fit: BoxFit.cover),
+            ),
+            const SizedBox(width: 5),
+            const Text('GPS Camera',
+                style: TextStyle(
+                    fontSize: 11, color: Colors.white, fontWeight: FontWeight.w600)),
           ]),
         ),
       );
