@@ -125,6 +125,8 @@ class StampWidget extends StatelessWidget {
           ? const Icon(Icons.map_outlined, color: Colors.white38)
           : Stack(fit: StackFit.expand, children: [
               Image.memory(d.map!, fit: BoxFit.cover, gaplessPlayback: true),
+              if (d.mapOverlay != null)
+                Image.memory(d.mapOverlay!, fit: BoxFit.cover, gaplessPlayback: true),
               Align(
                 alignment: Alignment(d.mapFx * 2 - 1, d.mapFy * 2 - 1 - .12),
                 child: const Icon(Icons.location_on, color: Colors.red, size: 26),
