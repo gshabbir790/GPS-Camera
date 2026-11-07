@@ -34,6 +34,16 @@ class AppSettings extends ChangeNotifier {
   bool nameLatLng = false;
   int seq = 1;
 
+  // نقشہ / والیوم بٹن / ویڈیو / رپورٹ
+  int mapType = 1; // 0 Normal, 1 Satellite, 2 Terrain, 3 Hybrid
+  int volumeAction = 0; // 0 Photo Capture, 1 Volume, 2 Zoom
+  int videoQuality = 0; // 0 HD, 1 Full HD, 2 4K
+  String rpTitle = 'Photo Report';
+  String rpTitleBA = 'Before / After Report';
+  String rpFooter = '';
+  bool rpShowDate = true;
+  bool rpShowLinks = true;
+
   // دستی لوکیشن
   bool manualOn = false;
   double mLat = 0, mLon = 0;
@@ -43,6 +53,13 @@ class AppSettings extends ChangeNotifier {
   bool saveGallery = true;
   bool saveOriginal = false;
   bool shareAfter = false;
+
+  static List<String> get videoLabels => ['HD 720p', 'Full HD 1080p', '4K'];
+  static List<String> get volumeLabels => [
+        S.t('Photo Capture', 'تصویر لینا'),
+        S.t('Volume', 'آواز'),
+        S.t('Zoom', 'زوم'),
+      ];
 
   static const ratioValues = [3 / 4, 9 / 16, 1.0]; // چوڑائی / اونچائی (پورٹریٹ)
   static const ratioLabels = ['4:3', '16:9', '1:1'];
@@ -55,6 +72,14 @@ class AppSettings extends ChangeNotifier {
 
   Future<void> load() async {
     final p = _p = await SharedPreferences.getInstance();
+    mapType = p.getInt('mapType') ?? mapType;
+    volumeAction = p.getInt('volumeAction') ?? volumeAction;
+    videoQuality = p.getInt('videoQuality') ?? videoQuality;
+    rpTitle = p.getString('rpTitle') ?? rpTitle;
+    rpTitleBA = p.getString('rpTitleBA') ?? rpTitleBA;
+    rpFooter = p.getString('rpFooter') ?? rpFooter;
+    rpShowDate = p.getBool('rpShowDate') ?? rpShowDate;
+    rpShowLinks = p.getBool('rpShowLinks') ?? rpShowLinks;
     manualOn = p.getBool('manualOn') ?? manualOn;
     mLat = p.getDouble('mLat') ?? mLat;
     mLon = p.getDouble('mLon') ?? mLon;
@@ -94,6 +119,14 @@ class AppSettings extends ChangeNotifier {
   Future<void> _save() async {
     final p = _p;
     if (p == null) return;
+    await p.setInt('mapType', mapType);
+    await p.setInt('volumeAction', volumeAction);
+    await p.setInt('videoQuality', videoQuality);
+    await p.setString('rpTitle', rpTitle);
+    await p.setString('rpTitleBA', rpTitleBA);
+    await p.setString('rpFooter', rpFooter);
+    await p.setBool('rpShowDate', rpShowDate);
+    await p.setBool('rpShowLinks', rpShowLinks);
     await p.setBool('manualOn', manualOn);
     await p.setDouble('mLat', mLat);
     await p.setDouble('mLon', mLon);

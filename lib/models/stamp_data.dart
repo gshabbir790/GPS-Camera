@@ -13,6 +13,7 @@ class StampData {
   final double heading;
   final double magnet;
   final Uint8List? map;
+  final Uint8List? mapOverlay;
   final double mapFx, mapFy;
   final String qrData;
 
@@ -28,6 +29,7 @@ class StampData {
     this.heading = 0,
     this.magnet = 0,
     this.map,
+    this.mapOverlay,
     this.mapFx = .5,
     this.mapFy = .5,
     this.qrData = '',
