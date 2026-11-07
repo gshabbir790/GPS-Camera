@@ -22,7 +22,8 @@ class AppSettings extends ChangeNotifier {
 
   // اسٹیمپ
   int template = 0; // 0 Advance, 1 DateTime, 2 Reporting, 3 Compass, 4 Scan
-  String note = 'Captured by GPS Map Camera';
+  String note = 'GPS Camera';
+  bool showNote = true;
   bool showMap = true;
   bool showLogo = true;
 
@@ -95,6 +96,8 @@ class AppSettings extends ChangeNotifier {
     mirror = p.getBool('mirror') ?? mirror;
     template = p.getInt('template') ?? template;
     note = p.getString('note') ?? note;
+    if (note == 'Captured by GPS Map Camera') note = 'GPS Camera'; // پرانا ڈیفالٹ
+    showNote = p.getBool('showNote') ?? showNote;
     showMap = p.getBool('showMap') ?? showMap;
     showLogo = p.getBool('showLogo') ?? showLogo;
     nameDate = p.getBool('nameDate') ?? nameDate;
@@ -141,6 +144,7 @@ class AppSettings extends ChangeNotifier {
     await p.setBool('mirror', mirror);
     await p.setInt('template', template);
     await p.setString('note', note);
+    await p.setBool('showNote', showNote);
     await p.setBool('showMap', showMap);
     await p.setBool('showLogo', showLogo);
     await p.setBool('nameDate', nameDate);
