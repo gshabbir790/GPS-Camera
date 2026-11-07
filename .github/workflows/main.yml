@@ -56,6 +56,13 @@ jobs:
           cp android_overrides/AndroidManifest.xml \
             android/app/src/main/AndroidManifest.xml
 
+          # Volume button + Downloads save support (native MainActivity)
+          MAIN_KT="$(find android/app/src/main -name MainActivity.kt | head -n 1)"
+          test -n "$MAIN_KT"
+          PKG="$(grep -m1 '^package ' "$MAIN_KT" | sed 's/^package //' | tr -d '\r ')"
+          test -n "$PKG"
+          sed "s/__PKG__/${PKG}/" android_overrides/MainActivity.kt.tpl > "$MAIN_KT"
+
       # 5. Install Android SDK 36
       - name: Install Android SDK Platform 36
         shell: bash
