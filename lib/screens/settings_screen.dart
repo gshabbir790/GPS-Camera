@@ -127,6 +127,12 @@ class SettingsScreen extends StatelessWidget {
               value: s.showLogo,
               onChanged: (v) => s.update(() => s.showLogo = v),
             ),
+            SwitchListTile(
+              secondary: const Icon(Icons.notes),
+              title: Text(S.t('Show note on stamp', 'اسٹیمپ پر نوٹ دکھائیں')),
+              value: s.showNote,
+              onChanged: (v) => s.update(() => s.showNote = v),
+            ),
             ListTile(
               leading: const Icon(Icons.edit_note),
               title: Text(S.t('Note (text printed on stamp)', 'نوٹ (اسٹیمپ پر لکھا جانے والا متن)')),

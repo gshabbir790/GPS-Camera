@@ -52,6 +52,9 @@ class _CameraScreenState extends State<CameraScreen> with WidgetsBindingObserver
   int _appliedMap = 1;
   bool _routeActive = true;
   static const _volCh = MethodChannel('gps_camera/volume');
+  static const _filesCh = MethodChannel('gps_camera/files');
+  int _pending = 0;
+  final Set<String> _reserved = {};
 
   bool _busy = false;
   int _count = 0;
@@ -322,7 +325,7 @@ class _CameraScreenState extends State<CameraScreen> with WidgetsBindingObserver
       address: g.fullAddress,
       latLon: hasFix ? g.latLonText : '',
       dateLine: StampData.fullLine(_now),
-      note: s.note,
+      note: s.showNote ? s.note : '',
       flag: g.flag,
       time: _now,
       altitude: g.altitude,
@@ -363,8 +366,9 @@ class _CameraScreenState extends State<CameraScreen> with WidgetsBindingObserver
 
     setState(() => _busy = true);
     String? srcPath;
+    var handedOff = false;
     try {
-      if (s.sound) SystemSound.play(SystemSoundType.click);
+      _playSound('shutter');
       final shot = await c.takePicture();
       srcPath = shot.path;
 
@@ -383,61 +387,112 @@ class _CameraScreenState extends State<CameraScreen> with WidgetsBindingObserver
       final stampPng = bd.buffer.asUint8List();
 
       final g = loc.state.value;
+      final snapTime = _now;
       final docs = await getApplicationDocumentsDirectory();
       final photos = Directory('${docs.path}/photos');
       if (!photos.existsSync()) photos.createSync(recursive: true);
 
-      var name = s.buildFileName(_now, g.lat, g.lon);
+      final name = s.buildFileName(snapTime, g.lat, g.lon);
       var outPath = '${photos.path}/$name';
       var n = 1;
-      while (File(outPath).existsSync()) {
+      while (File(outPath).existsSync() || _reserved.contains(outPath)) {
         final base = name.substring(0, name.length - 4);
         outPath = '${photos.path}/${base}_$n.jpg';
         n++;
       }
+      _reserved.add(outPath);
+      s.update(() => s.seq++);
 
-      await compute(
-        processPhoto,
-        ProcessArgs(
-          srcPath: srcPath,
-          outPath: outPath,
-          stampPng: stampPng,
-          ratio: s.ratioValue,
-          maxWidth: maxW,
-          jpgQuality: AppSettings.jpgQuality[s.quality],
-          mirror: s.mirror,
-        ),
+      final args = ProcessArgs(
+        srcPath: srcPath,
+        outPath: outPath,
+        stampPng: stampPng,
+        ratio: s.ratioValue,
+        maxWidth: maxW,
+        jpgQuality: AppSettings.jpgQuality[s.quality],
+        mirror: s.mirror,
       );
+
+      // باقی کام (کراپ، اسٹیمپ، JPG، گیلری) پس منظر میں - کیمرہ فوراً دوبارہ تیار
+      handedOff = true;
+      _pending++;
+      if (mounted) setState(() => _busy = false);
+      unawaited(_finishPhoto(args, g, snapTime));
+    } catch (e) {
+      _toast(S.t('Error: $e', 'خرابی: $e'));
+    } finally {
+      if (!handedOff) {
+        if (srcPath != null && !s.saveOriginal) {
+          try {
+            File(srcPath).deleteSync();
+          } catch (_) {}
+        }
+        if (mounted) setState(() => _busy = false);
+      }
+    }
+  }
+
+  Future<void> _finishPhoto(ProcessArgs a, GeoState g, DateTime t) async {
+    try {
+      await _compose(a);
 
       if (s.saveGallery) {
         try {
           if (!await Gal.hasAccess(toAlbum: true)) {
             await Gal.requestAccess(toAlbum: true);
           }
-          await Gal.putImage(outPath, album: 'GPS Camera');
-          if (s.saveOriginal) await Gal.putImage(srcPath, album: 'GPS Camera');
+          await Gal.putImage(a.outPath, album: 'GPS Camera');
+          if (s.saveOriginal) await Gal.putImage(a.srcPath, album: 'GPS Camera');
         } catch (_) {
-          _toast(S.t('Could not save to gallery - check permission', 'گیلری میں محفوظ نہیں ہو سکی - اجازت چیک کریں'));
+          _toast(S.t('Could not save to gallery - check permission',
+              'گیلری میں محفوظ نہیں ہو سکی - اجازت چیک کریں'));
         }
       }
 
-      writeMeta(outPath, lat: g.lat, lon: g.lon, time: _now, title: g.title);
-      s.update(() => s.seq++);
-      if (mounted) setState(() => _lastPhoto = outPath);
+      writeMeta(a.outPath, lat: g.lat, lon: g.lon, time: t, title: g.title);
+      if (mounted) setState(() => _lastPhoto = a.outPath);
       _toast(S.t('Photo saved ✓', 'تصویر محفوظ ہو گئی ✓'));
 
       if (s.shareAfter) {
-        await Share.shareXFiles([XFile(outPath)]);
+        await Share.shareXFiles([XFile(a.outPath)]);
       }
     } catch (e) {
       _toast(S.t('Error: $e', 'خرابی: $e'));
     } finally {
-      if (srcPath != null && !s.saveOriginal) {
+      if (!s.saveOriginal) {
         try {
-          File(srcPath).deleteSync();
+          File(a.srcPath).deleteSync();
         } catch (_) {}
       }
-      if (mounted) setState(() => _busy = false);
+      _reserved.remove(a.outPath);
+      _pending--;
+      if (mounted) setState(() {});
+    }
+  }
+
+  /// تیز پروسیسنگ: Android کے native کوڈ سے (کچھ سو ملی سیکنڈ)، ناکام ہو تو Dart سے
+  Future<void> _compose(ProcessArgs a) async {
+    try {
+      final ok = await _filesCh.invokeMethod<bool>('composePhoto', {
+        'src': a.srcPath,
+        'out': a.outPath,
+        'stamp': a.stampPng,
+        'ratio': a.ratio,
+        'maxWidth': a.maxWidth,
+        'quality': a.jpgQuality,
+        'mirror': a.mirror,
+      });
+      if (ok == true) return;
+    } catch (_) {}
+    await compute(processPhoto, a);
+  }
+
+  Future<void> _playSound(String kind) async {
+    if (!s.sound) return;
+    try {
+      await _filesCh.invokeMethod('sound', kind);
+    } catch (_) {
+      SystemSound.play(SystemSoundType.click);
     }
   }
 
@@ -451,6 +506,7 @@ class _CameraScreenState extends State<CameraScreen> with WidgetsBindingObserver
     }
     try {
       if (_flash == FlashMode.always) await c.setFlashMode(FlashMode.torch);
+      _playSound('start');
       await c.startVideoRecording();
       _recSecs = 0;
       _recTimer?.cancel();
@@ -474,6 +530,7 @@ class _CameraScreenState extends State<CameraScreen> with WidgetsBindingObserver
     String? path;
     try {
       final f = await c.stopVideoRecording();
+      _playSound('stop');
       path = f.path;
       try {
         await c.setFlashMode(_flash == FlashMode.always ? FlashMode.off : _flash);
@@ -570,7 +627,12 @@ class _CameraScreenState extends State<CameraScreen> with WidgetsBindingObserver
         ],
       ),
     );
-    if (r != null) s.update(() => s.note = r.trim());
+    if (r != null) {
+      s.update(() {
+        s.note = r.trim();
+        if (s.note.isNotEmpty) s.showNote = true;
+      });
+    }
   }
 
   // ---------------- لوکیشن ایڈٹ ----------------
@@ -820,6 +882,27 @@ class _CameraScreenState extends State<CameraScreen> with WidgetsBindingObserver
                 ),
                 if (s.grid) const IgnorePointer(child: CustomPaint(painter: _GridPainter())),
                 Positioned(top: 6, left: 6, child: _locChip()),
+                if (_pending > 0)
+                  Positioned(
+                    top: 38,
+                    left: 6,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      decoration: BoxDecoration(
+                          color: Colors.black54, borderRadius: BorderRadius.circular(14)),
+                      child: Row(mainAxisSize: MainAxisSize.min, children: [
+                        const SizedBox(
+                          width: 12,
+                          height: 12,
+                          child: CircularProgressIndicator(
+                              strokeWidth: 2, color: Color(0xFFFFC400)),
+                        ),
+                        const SizedBox(width: 6),
+                        Text(S.t('Saving ($_pending)...', 'محفوظ ہو رہی ہے ($_pending)...'),
+                            style: const TextStyle(color: Colors.white, fontSize: 11)),
+                      ]),
+                    ),
+                  ),
                 if (_mode == 1)
                   Positioned(
                     top: 6,
