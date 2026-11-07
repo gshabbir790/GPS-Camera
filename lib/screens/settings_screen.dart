@@ -4,6 +4,8 @@ import '../l10n/strings.dart';
 import '../models/app_settings.dart';
 import '../models/stamp_data.dart';
 import '../widgets/credit_banner.dart';
+import '../widgets/map_type_sheet.dart';
+import 'report_settings_screen.dart';
 
 class SettingsScreen extends StatelessWidget {
   const SettingsScreen({super.key});
@@ -47,6 +49,32 @@ class SettingsScreen extends StatelessWidget {
               ),
             ),
             ListTile(
+              leading: const Icon(Icons.videocam),
+              title: Text(S.t('Video quality', 'ویڈیو کا معیار')),
+              trailing: DropdownButton<int>(
+                value: s.videoQuality,
+                underline: const SizedBox(),
+                items: [
+                  for (var i = 0; i < 3; i++)
+                    DropdownMenuItem(value: i, child: Text(AppSettings.videoLabels[i])),
+                ],
+                onChanged: (v) => s.update(() => s.videoQuality = v ?? 0),
+              ),
+            ),
+            ListTile(
+              leading: const Icon(Icons.volume_down),
+              title: Text(S.t('Volume button action', 'والیوم بٹن کا کام')),
+              trailing: DropdownButton<int>(
+                value: s.volumeAction,
+                underline: const SizedBox(),
+                items: [
+                  for (var i = 0; i < 3; i++)
+                    DropdownMenuItem(value: i, child: Text(AppSettings.volumeLabels[i])),
+                ],
+                onChanged: (v) => s.update(() => s.volumeAction = v ?? 0),
+              ),
+            ),
+            ListTile(
               leading: const Icon(Icons.aspect_ratio),
               title: Text(S.t('Ratio', 'ریشو')),
               trailing: DropdownButton<int>(
@@ -79,6 +107,13 @@ class SettingsScreen extends StatelessWidget {
               onChanged: (v) => s.update(() => s.mirror = v),
             ),
             _header(S.t('Stamp', 'اسٹیمپ')),
+            ListTile(
+              leading: const Icon(Icons.layers),
+              title: Text(S.t('Map type', 'نقشے کی قسم')),
+              subtitle: Text(mapTypeNames()[s.mapType]),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () => showMapTypeSheet(context),
+            ),
             SwitchListTile(
               secondary: const Icon(Icons.map),
               title: Text(S.t('Show map', 'نقشہ دکھائیں')),
@@ -141,6 +176,14 @@ class SettingsScreen extends StatelessWidget {
                     context, S.t('Custom name in file name', 'فائل کے نام میں اپنا نام'), s.customName,
                     (v) => s.update(() => s.customName = v)),
               ),
+            ),
+            ListTile(
+              leading: const Icon(Icons.description),
+              title: Text(S.t('Report settings', 'رپورٹ سیٹنگز')),
+              subtitle: Text(S.t('Titles, footer, date and map links', 'عنوان، فوٹر، تاریخ اور میپ لنک')),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () => Navigator.push(
+                  context, MaterialPageRoute(builder: (_) => const ReportSettingsScreen())),
             ),
             _header(S.t('Storage and share', 'سٹوریج اور شیئر')),
             SwitchListTile(

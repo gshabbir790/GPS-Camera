@@ -20,7 +20,9 @@ import '../services/location_service.dart';
 import '../services/photo_processor.dart';
 import '../widgets/stamp_widget.dart';
 import '../widgets/exit_guard.dart';
+import '../services/photo_meta.dart';
 import 'gallery_screen.dart';
+import 'report_home_screen.dart';
 import 'settings_screen.dart';
 import 'template_screen.dart';
 
@@ -41,7 +43,15 @@ class _CameraScreenState extends State<CameraScreen> with WidgetsBindingObserver
   FlashMode _flash = FlashMode.off;
   double _zoom = 1, _minZoom = 1, _maxZoom = 1;
   String? _error;
-  int _appliedQuality = 0;
+  String _camKey = '';
+  int _mode = 0; // 0 تصویر، 1 ویڈیو
+  bool _recording = false;
+  int _recSecs = 0;
+  Timer? _recTimer;
+  bool _audioDenied = false;
+  int _appliedMap = 1;
+  bool _routeActive = true;
+  static const _volCh = MethodChannel('gps_camera/volume');
 
   bool _busy = false;
   int _count = 0;
@@ -61,8 +71,11 @@ class _CameraScreenState extends State<CameraScreen> with WidgetsBindingObserver
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    _appliedQuality = s.quality;
+    _appliedMap = s.mapType;
+    loc.mapType = s.mapType;
     s.addListener(_onSettings);
+    _volCh.setMethodCallHandler(_onNative);
+    _syncIntercept();
     if (s.manualOn) loc.setManual(s.mLat, s.mLon, title: s.mTitle, address: s.mAddress);
     loc.start();
     _tick = Timer.periodic(const Duration(seconds: 1), (_) {
@@ -78,6 +91,9 @@ class _CameraScreenState extends State<CameraScreen> with WidgetsBindingObserver
     WidgetsBinding.instance.removeObserver(this);
     s.removeListener(_onSettings);
     _tick?.cancel();
+    _recTimer?.cancel();
+    _volCh.setMethodCallHandler(null);
+    _volCh.invokeMethod('intercept', false).catchError((_) {});
     _accSub?.cancel();
     _magSub?.cancel();
     loc.dispose();
@@ -87,7 +103,12 @@ class _CameraScreenState extends State<CameraScreen> with WidgetsBindingObserver
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState st) {
+    _lifecycle(st);
+  }
+
+  Future<void> _lifecycle(AppLifecycleState st) async {
     if (st == AppLifecycleState.inactive || st == AppLifecycleState.paused) {
+      if (_recording) await _stopRecording();
       final c = _ctrl;
       _ctrl = null;
       c?.dispose();
@@ -100,16 +121,51 @@ class _CameraScreenState extends State<CameraScreen> with WidgetsBindingObserver
   }
 
   void _onSettings() {
-    if (s.quality != _appliedQuality) {
-      _appliedQuality = s.quality;
+    if (_camKeyNow() != _camKey) {
       _initCamera();
     }
+    if (s.mapType != _appliedMap) {
+      _appliedMap = s.mapType;
+      loc.setMapType(s.mapType);
+    }
+    _syncIntercept();
     _syncSensors();
     if (mounted) setState(() {});
   }
 
+  // ---------------- والیوم بٹن (native MainActivity کے ذریعے) ----------------
+  Future<void> _syncIntercept() async {
+    try {
+      await _volCh.invokeMethod('intercept', s.volumeAction != 1 && _routeActive);
+    } catch (_) {}
+  }
+
+  Future<dynamic> _onNative(MethodCall call) async {
+    if (call.method != 'key' || !mounted || !_routeActive) return;
+    final m = Map<String, dynamic>.from(call.arguments as Map);
+    final dir = m['dir'] as String? ?? 'up';
+    final rep = (m['repeat'] as int?) ?? 0;
+    if (s.volumeAction == 0) {
+      if (rep == 0) _capture();
+    } else if (s.volumeAction == 2) {
+      _setZoom(_zoom + (dir == 'up' ? 0.5 : -0.5));
+    }
+  }
+
+  Future<T?> _open<T>(Widget page) async {
+    _routeActive = false;
+    _syncIntercept();
+    final r = await Navigator.push<T>(context, MaterialPageRoute(builder: (_) => page));
+    _routeActive = true;
+    _syncIntercept();
+    return r;
+  }
+
   // ---------------- کیمرہ ----------------
+  String _camKeyNow() => '${s.quality}-${s.videoQuality}-$_mode';
+
   Future<void> _initCamera() async {
+    _camKey = _camKeyNow();
     try {
       if (_cams.isEmpty) _cams = await availableCameras();
       if (_cams.isEmpty) {
@@ -118,11 +174,17 @@ class _CameraScreenState extends State<CameraScreen> with WidgetsBindingObserver
       }
       final dir = _front ? CameraLensDirection.front : CameraLensDirection.back;
       final desc = _cams.firstWhere((c) => c.lensDirection == dir, orElse: () => _cams.first);
-      final preset = [
-        ResolutionPreset.ultraHigh,
-        ResolutionPreset.veryHigh,
-        ResolutionPreset.high,
-      ][s.quality];
+      final preset = _mode == 1
+          ? [
+              ResolutionPreset.high,
+              ResolutionPreset.veryHigh,
+              ResolutionPreset.ultraHigh,
+            ][s.videoQuality]
+          : [
+              ResolutionPreset.ultraHigh,
+              ResolutionPreset.veryHigh,
+              ResolutionPreset.high,
+            ][s.quality];
 
       final old = _ctrl;
       _ctrl = null;
@@ -132,7 +194,7 @@ class _CameraScreenState extends State<CameraScreen> with WidgetsBindingObserver
       final c = CameraController(
         desc,
         preset,
-        enableAudio: false,
+        enableAudio: _mode == 1 && !_audioDenied,
         imageFormatGroup: ImageFormatGroup.jpeg,
       );
       await c.initialize();
@@ -151,6 +213,13 @@ class _CameraScreenState extends State<CameraScreen> with WidgetsBindingObserver
         _error = null;
       });
     } on CameraException catch (e) {
+      if (e.code.toLowerCase().contains('audio') && !_audioDenied) {
+        _audioDenied = true;
+        _toast(S.t('Microphone denied - video will have no sound',
+            'مائیکروفون کی اجازت نہیں - ویڈیو بغیر آواز کے بنے گی'));
+        _initCamera();
+        return;
+      }
       if (mounted) {
         setState(() => _error = (e.code.contains('Denied'))
             ? S.t('Allow camera permission (Settings → Apps → GPS Camera)', 'کیمرے کی اجازت دیں (Settings → Apps → GPS Camera)')
@@ -260,6 +329,7 @@ class _CameraScreenState extends State<CameraScreen> with WidgetsBindingObserver
       heading: _heading,
       magnet: _magnet,
       map: g.tile,
+      mapOverlay: g.overlay,
       mapFx: g.fx,
       mapFy: g.fy,
       qrData: hasFix ? 'https://maps.google.com/?q=${g.lat},${g.lon}' : '',
@@ -269,7 +339,12 @@ class _CameraScreenState extends State<CameraScreen> with WidgetsBindingObserver
   // ---------------- تصویر لینا ----------------
   Future<void> _capture() async {
     final c = _ctrl;
-    if (c == null || !c.value.isInitialized || _busy) return;
+    if (c == null || !c.value.isInitialized) return;
+    if (_mode == 1) {
+      await _toggleRecord();
+      return;
+    }
+    if (_busy) return;
     if (!loc.state.value.hasFix) {
       _toast(S.t('Waiting for GPS location... or set location manually',
           'GPS لوکیشن کا انتظار کریں... یا لوکیشن دستی سیٹ کریں'));
@@ -346,6 +421,7 @@ class _CameraScreenState extends State<CameraScreen> with WidgetsBindingObserver
         }
       }
 
+      writeMeta(outPath, lat: g.lat, lon: g.lon, time: _now, title: g.title);
       s.update(() => s.seq++);
       if (mounted) setState(() => _lastPhoto = outPath);
       _toast(S.t('Photo saved ✓', 'تصویر محفوظ ہو گئی ✓'));
@@ -365,12 +441,105 @@ class _CameraScreenState extends State<CameraScreen> with WidgetsBindingObserver
     }
   }
 
+  // ---------------- ویڈیو ----------------
+  Future<void> _toggleRecord() async {
+    final c = _ctrl;
+    if (c == null || !c.value.isInitialized) return;
+    if (_recording) {
+      await _stopRecording();
+      return;
+    }
+    try {
+      if (_flash == FlashMode.always) await c.setFlashMode(FlashMode.torch);
+      await c.startVideoRecording();
+      _recSecs = 0;
+      _recTimer?.cancel();
+      _recTimer = Timer.periodic(const Duration(seconds: 1), (_) {
+        if (mounted) setState(() => _recSecs++);
+      });
+      if (mounted) setState(() => _recording = true);
+    } catch (e) {
+      _toast(S.t('Could not start recording: $e', 'ریکارڈنگ شروع نہیں ہو سکی: $e'));
+    }
+  }
+
+  Future<void> _stopRecording() async {
+    final c = _ctrl;
+    if (c == null || !_recording) return;
+    _recTimer?.cancel();
+    if (mounted) setState(() {
+      _recording = false;
+      _busy = true;
+    });
+    String? path;
+    try {
+      final f = await c.stopVideoRecording();
+      path = f.path;
+      try {
+        await c.setFlashMode(_flash == FlashMode.always ? FlashMode.off : _flash);
+      } catch (_) {}
+      if (!await Gal.hasAccess(toAlbum: true)) await Gal.requestAccess(toAlbum: true);
+      await Gal.putVideo(path, album: 'GPS Camera');
+      _toast(S.t('Video saved ✓', 'ویڈیو محفوظ ہو گئی ✓'));
+    } catch (e) {
+      _toast(S.t('Error: $e', 'خرابی: $e'));
+    } finally {
+      if (path != null) {
+        try {
+          File(path).deleteSync();
+        } catch (_) {}
+      }
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  String _recText() {
+    String p(int v) => v.toString().padLeft(2, '0');
+    return '${p(_recSecs ~/ 60)}:${p(_recSecs % 60)}';
+  }
+
+  void _setMode(int m) {
+    if (_recording || _busy || m == _mode) return;
+    setState(() => _mode = m);
+    _initCamera();
+  }
+
+  Widget _modeBar() {
+    Widget tab(String label, bool sel, VoidCallback onTap) => GestureDetector(
+          onTap: onTap,
+          child: Container(
+            margin: const EdgeInsets.symmetric(horizontal: 6),
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 5),
+            decoration: BoxDecoration(
+              color: sel ? const Color(0xFFFFC400) : Colors.transparent,
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Text(label,
+                style: TextStyle(
+                    color: sel ? Colors.black : Colors.white,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 13)),
+          ),
+        );
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+        tab(S.t('PHOTO', 'تصویر'), _mode == 0, () => _setMode(0)),
+        tab(S.t('VIDEO', 'ویڈیو'), _mode == 1, () => _setMode(1)),
+        tab(S.t('REPORTS', 'رپورٹس'), false, () {
+          if (_recording) return;
+          _open(const ReportHomeScreen());
+        }),
+      ]),
+    );
+  }
+
   Future<void> _loadLast() async {
     try {
       final docs = await getApplicationDocumentsDirectory();
       final dir = Directory('${docs.path}/photos');
       if (!dir.existsSync()) return;
-      final files = dir.listSync().whereType<File>().toList()
+      final files = dir.listSync().whereType<File>().where((f) => f.path.endsWith('.jpg')).toList()
         ..sort((a, b) => b.lastModifiedSync().compareTo(a.lastModifiedSync()));
       if (files.isNotEmpty && mounted) setState(() => _lastPhoto = files.first.path);
     } catch (_) {}
@@ -558,6 +727,7 @@ class _CameraScreenState extends State<CameraScreen> with WidgetsBindingObserver
               _topBar(),
               Expanded(child: Center(child: _previewBox())),
               _zoomChips(),
+              _modeBar(),
               _bottomBar(),
             ],
           ),
@@ -610,7 +780,7 @@ class _CameraScreenState extends State<CameraScreen> with WidgetsBindingObserver
             _initCamera();
           }),
           _iconBtn(Icons.settings, () {
-            Navigator.push(context, MaterialPageRoute(builder: (_) => const SettingsScreen()));
+            _open(const SettingsScreen());
           }),
         ],
       ),
@@ -650,6 +820,36 @@ class _CameraScreenState extends State<CameraScreen> with WidgetsBindingObserver
                 ),
                 if (s.grid) const IgnorePointer(child: CustomPaint(painter: _GridPainter())),
                 Positioned(top: 6, left: 6, child: _locChip()),
+                if (_mode == 1)
+                  Positioned(
+                    top: 6,
+                    right: 6,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      decoration: BoxDecoration(
+                          color: Colors.black54, borderRadius: BorderRadius.circular(14)),
+                      child: Row(mainAxisSize: MainAxisSize.min, children: [
+                        Icon(Icons.fiber_manual_record,
+                            size: 12, color: _recording ? Colors.red : Colors.white54),
+                        const SizedBox(width: 4),
+                        Text(_recording ? _recText() : S.t('VIDEO', 'ویڈیو'),
+                            style: const TextStyle(color: Colors.white, fontSize: 12)),
+                      ]),
+                    ),
+                  ),
+                if (_mode == 1 && !_recording)
+                  Positioned(
+                    bottom: 10,
+                    left: 12,
+                    right: 12,
+                    child: Text(
+                      S.t('Video is saved without the location stamp',
+                          'ویڈیو لوکیشن اسٹیمپ کے بغیر محفوظ ہوگی'),
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(color: Colors.white70, fontSize: 12),
+                    ),
+                  ),
+                if (_mode == 0)
                 Positioned(
                   left: 0,
                   right: 0,
@@ -721,8 +921,7 @@ class _CameraScreenState extends State<CameraScreen> with WidgetsBindingObserver
           // گیلری / سٹوریج
           GestureDetector(
             onTap: () async {
-              await Navigator.push(
-                  context, MaterialPageRoute(builder: (_) => const GalleryScreen()));
+              await _open(const GalleryScreen());
               _loadLast();
             },
             child: Column(mainAxisSize: MainAxisSize.min, children: [
@@ -754,17 +953,26 @@ class _CameraScreenState extends State<CameraScreen> with WidgetsBindingObserver
               ),
               padding: const EdgeInsets.all(4),
               child: Container(
+                margin: EdgeInsets.all(_recording ? 14 : 0),
                 decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: _busy ? Colors.grey : const Color(0xFFFFC400),
+                  shape: _recording ? BoxShape.rectangle : BoxShape.circle,
+                  borderRadius: _recording ? BorderRadius.circular(6) : null,
+                  color: _busy
+                      ? Colors.grey
+                      : (_mode == 1 ? Colors.red : const Color(0xFFFFC400)),
                 ),
               ),
             ),
           ),
           // ٹیمپلیٹ
           GestureDetector(
-            onTap: () => Navigator.push(
-                context, MaterialPageRoute(builder: (_) => const TemplateScreen())),
+            onTap: () => _open(TemplateScreen(
+              geo: loc.state,
+              build: (g) {
+                _now = DateTime.now();
+                return _stampData(g);
+              },
+            )),
             child: Column(mainAxisSize: MainAxisSize.min, children: [
               const Icon(Icons.dashboard_customize, color: Colors.white, size: 34),
               const SizedBox(height: 4),

@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import '../l10n/strings.dart';
+import '../services/photo_meta.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 
@@ -87,6 +88,19 @@ class _Viewer extends StatelessWidget {
           child: Text(name, style: const TextStyle(fontSize: 13)),
         ),
         actions: [
+          if (readMeta(file.path) != null)
+            IconButton(
+              tooltip: 'Open in Google Maps',
+              icon: const Icon(Icons.location_on),
+              onPressed: () async {
+                final m = readMeta(file.path)!;
+                final ok = await openMaps(m.lat, m.lon);
+                if (!ok && context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                      content: Text(S.t('Could not open Google Maps', 'گوگل میپس نہیں کھل سکا'))));
+                }
+              },
+            ),
           IconButton(
             icon: const Icon(Icons.share),
             onPressed: () => Share.shareXFiles([XFile(file.path)]),
@@ -110,6 +124,7 @@ class _Viewer extends StatelessWidget {
               if (ok == true) {
                 try {
                   file.deleteSync();
+                  deleteMeta(file.path);
                 } catch (_) {}
                 if (context.mounted) Navigator.pop(context);
               }
