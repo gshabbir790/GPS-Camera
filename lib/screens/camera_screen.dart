@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 import 'dart:math';
+import 'dart:typed_data';
 import 'dart:ui' as ui;
 
 import 'package:camera/camera.dart';
@@ -497,6 +498,24 @@ class _CameraScreenState extends State<CameraScreen> with WidgetsBindingObserver
   }
 
   // ---------------- ویڈیو ----------------
+  Uint8List? _videoStamp;
+
+  /// موجودہ اسٹیمپ کو PNG میں بدلیں (ویڈیو کے لیے)
+  Future<Uint8List?> _renderStamp(int width) async {
+    try {
+      _now = DateTime.now();
+      setState(() {});
+      await WidgetsBinding.instance.endOfFrame;
+      final boundary =
+          _stampKey.currentContext!.findRenderObject() as RenderRepaintBoundary;
+      final img = await boundary.toImage(pixelRatio: width / boundary.size.width);
+      final bd = await img.toByteData(format: ui.ImageByteFormat.png);
+      return bd?.buffer.asUint8List();
+    } catch (_) {
+      return null;
+    }
+  }
+
   Future<void> _toggleRecord() async {
     final c = _ctrl;
     if (c == null || !c.value.isInitialized) return;
@@ -505,6 +524,8 @@ class _CameraScreenState extends State<CameraScreen> with WidgetsBindingObserver
       return;
     }
     try {
+      // ریکارڈنگ شروع ہونے کے وقت کا اسٹیمپ (لوکیشن + وقت) تیار کر لیں
+      _videoStamp = loc.state.value.hasFix || s.manualOn ? await _renderStamp(1600) : null;
       if (_flash == FlashMode.always) await c.setFlashMode(FlashMode.torch);
       _playSound('start');
       await c.startVideoRecording();
@@ -523,30 +544,55 @@ class _CameraScreenState extends State<CameraScreen> with WidgetsBindingObserver
     final c = _ctrl;
     if (c == null || !_recording) return;
     _recTimer?.cancel();
-    if (mounted) setState(() {
-      _recording = false;
-      _busy = true;
-    });
-    String? path;
+    if (mounted) setState(() => _recording = false);
     try {
       final f = await c.stopVideoRecording();
       _playSound('stop');
-      path = f.path;
       try {
         await c.setFlashMode(_flash == FlashMode.always ? FlashMode.off : _flash);
       } catch (_) {}
+      final stamp = _videoStamp;
+      _videoStamp = null;
+      // اسٹیمپ لگانا پس منظر میں (ویڈیو کی لمبائی کے مطابق وقت لگتا ہے)
+      _pending++;
+      if (mounted) setState(() {});
+      unawaited(_finishVideo(f.path, stamp));
+    } catch (e) {
+      _toast(S.t('Error: $e', 'خرابی: $e'));
+    }
+  }
+
+  Future<void> _finishVideo(String path, Uint8List? stamp) async {
+    final out = '$path.stamped.mp4';
+    var burned = false;
+    try {
+      if (stamp != null) {
+        try {
+          burned = (await _filesCh.invokeMethod<bool>(
+                  'burnVideo', {'src': path, 'out': out, 'stamp': stamp})) ==
+              true;
+        } catch (_) {
+          burned = false;
+        }
+      }
+      final finalPath = burned ? out : path;
       if (!await Gal.hasAccess(toAlbum: true)) await Gal.requestAccess(toAlbum: true);
-      await Gal.putVideo(path, album: 'GPS Camera');
-      _toast(S.t('Video saved ✓', 'ویڈیو محفوظ ہو گئی ✓'));
+      await Gal.putVideo(finalPath, album: 'GPS Camera');
+      _toast(burned
+          ? S.t('Video saved with location stamp ✓', 'ویڈیو لوکیشن اسٹیمپ کے ساتھ محفوظ ہو گئی ✓')
+          : S.t('Video saved (stamp could not be added)',
+              'ویڈیو محفوظ ہو گئی (اسٹیمپ نہیں لگ سکا)'));
     } catch (e) {
       _toast(S.t('Error: $e', 'خرابی: $e'));
     } finally {
-      if (path != null) {
+      for (final p in [path, out]) {
         try {
-          File(path).deleteSync();
+          final f = File(p);
+          if (f.existsSync()) f.deleteSync();
         } catch (_) {}
       }
-      if (mounted) setState(() => _busy = false);
+      _pending--;
+      if (mounted) setState(() {});
     }
   }
 
@@ -561,7 +607,7 @@ class _CameraScreenState extends State<CameraScreen> with WidgetsBindingObserver
     _initCamera();
   }
 
-  Widget _modeBar() {
+  Widget _modeBar({bool vertical = false}) {
     Widget tab(String label, bool sel, VoidCallback onTap) => GestureDetector(
           onTap: onTap,
           child: Container(
@@ -578,16 +624,21 @@ class _CameraScreenState extends State<CameraScreen> with WidgetsBindingObserver
                     fontSize: 13)),
           ),
         );
+    final tabs = <Widget>[
+      tab(S.t('PHOTO', 'تصویر'), _mode == 0, () => _setMode(0)),
+      tab(S.t('VIDEO', 'ویڈیو'), _mode == 1, () => _setMode(1)),
+      tab(S.t('REPORTS', 'رپورٹس'), false, () {
+        if (_recording) return;
+        _open(const ReportHomeScreen());
+      }),
+    ];
     return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
-      child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-        tab(S.t('PHOTO', 'تصویر'), _mode == 0, () => _setMode(0)),
-        tab(S.t('VIDEO', 'ویڈیو'), _mode == 1, () => _setMode(1)),
-        tab(S.t('REPORTS', 'رپورٹس'), false, () {
-          if (_recording) return;
-          _open(const ReportHomeScreen());
-        }),
-      ]),
+      padding: EdgeInsets.only(bottom: vertical ? 0 : 8),
+      child: vertical
+          ? Column(mainAxisSize: MainAxisSize.min, children: [
+              for (final w in tabs) Padding(padding: const EdgeInsets.symmetric(vertical: 3), child: w)
+            ])
+          : Row(mainAxisAlignment: MainAxisAlignment.center, children: tabs),
     );
   }
 
@@ -778,26 +829,62 @@ class _CameraScreenState extends State<CameraScreen> with WidgetsBindingObserver
   // ---------------- UI ----------------
   @override
   Widget build(BuildContext context) {
+    final land = MediaQuery.of(context).orientation == Orientation.landscape;
     return ExitGuard(
       child: Scaffold(
-      backgroundColor: Colors.black,
-      body: SafeArea(
-        child: Directionality(
-          textDirection: TextDirection.ltr,
-          child: Column(
-            children: [
-              _topBar(),
-              Expanded(child: Center(child: _previewBox())),
-              _zoomChips(),
-              _modeBar(),
-              _bottomBar(),
-            ],
+        backgroundColor: Colors.black,
+        body: SafeArea(
+          child: Directionality(
+            textDirection: TextDirection.ltr,
+            child: land ? _landscapeBody() : _portraitBody(),
           ),
         ),
       ),
-      ),
     );
   }
+
+  Widget _portraitBody() => Column(
+        children: [
+          _topBar(),
+          Expanded(child: Center(child: _previewBox(false))),
+          _zoomChips(),
+          _modeBar(),
+          _bottomBar(),
+        ],
+      );
+
+  /// فون آڑا (landscape) ہو تو: بائیں گیلری/ٹیمپلیٹ، درمیان پریویو، دائیں شٹر
+  Widget _landscapeBody() => Row(
+        children: [
+          SizedBox(
+            width: 88,
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+              children: [_galleryBtn(), _templateBtn()],
+            ),
+          ),
+          Expanded(
+            child: Column(
+              children: [
+                _topBar(),
+                Expanded(child: Center(child: _previewBox(true))),
+                _zoomChips(),
+              ],
+            ),
+          ),
+          SizedBox(
+            width: 104,
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                _modeBar(vertical: true),
+                const SizedBox(height: 10),
+                _shutterBtn(),
+              ],
+            ),
+          ),
+        ],
+      );
 
   Widget _iconBtn(IconData icon, VoidCallback onTap,
       {String? label, bool active = false}) {
@@ -849,7 +936,7 @@ class _CameraScreenState extends State<CameraScreen> with WidgetsBindingObserver
     );
   }
 
-  Widget _previewBox() {
+  Widget _previewBox(bool landscapeUi) {
     final c = _ctrl;
     if (_error != null) {
       return Padding(
@@ -864,7 +951,7 @@ class _CameraScreenState extends State<CameraScreen> with WidgetsBindingObserver
     }
     final ps = c.value.previewSize ?? const Size(1280, 720);
     return AspectRatio(
-      aspectRatio: s.ratioValue,
+      aspectRatio: landscapeUi ? 1 / s.ratioValue : s.ratioValue,
       child: ClipRect(
         child: LayoutBuilder(builder: (context, box) {
           return GestureDetector(
@@ -872,13 +959,22 @@ class _CameraScreenState extends State<CameraScreen> with WidgetsBindingObserver
             child: Stack(
               fit: StackFit.expand,
               children: [
-                FittedBox(
-                  fit: BoxFit.cover,
-                  child: SizedBox(
-                    width: ps.height, // پورٹریٹ میں چوڑائی/اونچائی الٹ جاتی ہے
-                    height: ps.width,
-                    child: CameraPreview(c),
-                  ),
+                ValueListenableBuilder<CameraValue>(
+                  valueListenable: c,
+                  builder: (_, v, __) {
+                    final o = v.deviceOrientation;
+                    final land = o == DeviceOrientation.landscapeLeft ||
+                        o == DeviceOrientation.landscapeRight;
+                    return FittedBox(
+                      fit: BoxFit.cover,
+                      child: SizedBox(
+                        // آڑا فون: چوڑائی > اونچائی، سیدھا فون: الٹ
+                        width: land ? ps.width : ps.height,
+                        height: land ? ps.height : ps.width,
+                        child: CameraPreview(c),
+                      ),
+                    );
+                  },
                 ),
                 if (s.grid) const IgnorePointer(child: CustomPaint(painter: _GridPainter())),
                 Positioned(top: 6, left: 6, child: _locChip()),
@@ -920,19 +1016,6 @@ class _CameraScreenState extends State<CameraScreen> with WidgetsBindingObserver
                       ]),
                     ),
                   ),
-                if (_mode == 1 && !_recording)
-                  Positioned(
-                    bottom: 10,
-                    left: 12,
-                    right: 12,
-                    child: Text(
-                      S.t('Video is saved without the location stamp',
-                          'ویڈیو لوکیشن اسٹیمپ کے بغیر محفوظ ہوگی'),
-                      textAlign: TextAlign.center,
-                      style: const TextStyle(color: Colors.white70, fontSize: 12),
-                    ),
-                  ),
-                if (_mode == 0)
                 Positioned(
                   left: 0,
                   right: 0,
@@ -995,74 +1078,75 @@ class _CameraScreenState extends State<CameraScreen> with WidgetsBindingObserver
     ]);
   }
 
+  Widget _galleryBtn() => GestureDetector(
+        onTap: () async {
+          await _open(const GalleryScreen());
+          _loadLast();
+        },
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          Container(
+            width: 50,
+            height: 50,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: Colors.white12,
+              border: Border.all(color: Colors.white38),
+            ),
+            clipBehavior: Clip.antiAlias,
+            child: (_lastPhoto != null && File(_lastPhoto!).existsSync())
+                ? Image.file(File(_lastPhoto!), fit: BoxFit.cover, cacheWidth: 150)
+                : const Icon(Icons.photo_library, color: Colors.white70),
+          ),
+          Text(S.t('Storage', 'سٹوریج'),
+              style: const TextStyle(color: Colors.white70, fontSize: 11)),
+        ]),
+      );
+
+  Widget _shutterBtn() => GestureDetector(
+        onTap: _capture,
+        child: Container(
+          width: 76,
+          height: 76,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            border: Border.all(color: Colors.white, width: 4),
+          ),
+          padding: const EdgeInsets.all(4),
+          child: Container(
+            margin: EdgeInsets.all(_recording ? 14 : 0),
+            decoration: BoxDecoration(
+              shape: _recording ? BoxShape.rectangle : BoxShape.circle,
+              borderRadius: _recording ? BorderRadius.circular(6) : null,
+              color: _busy
+                  ? Colors.grey
+                  : (_mode == 1 ? Colors.red : const Color(0xFFFFC400)),
+            ),
+          ),
+        ),
+      );
+
+  Widget _templateBtn() => GestureDetector(
+        onTap: () => _open(TemplateScreen(
+          geo: loc.state,
+          build: (g) {
+            _now = DateTime.now();
+            return _stampData(g);
+          },
+        )),
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          const Icon(Icons.dashboard_customize, color: Colors.white, size: 34),
+          const SizedBox(height: 4),
+          Text(S.t('Template', 'ٹیمپلیٹ'),
+              style: const TextStyle(color: Colors.white70, fontSize: 11)),
+        ]),
+      );
+
   Widget _bottomBar() {
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 0, 16, 10),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          // گیلری / سٹوریج
-          GestureDetector(
-            onTap: () async {
-              await _open(const GalleryScreen());
-              _loadLast();
-            },
-            child: Column(mainAxisSize: MainAxisSize.min, children: [
-              Container(
-                width: 50,
-                height: 50,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: Colors.white12,
-                  border: Border.all(color: Colors.white38),
-                ),
-                clipBehavior: Clip.antiAlias,
-                child: (_lastPhoto != null && File(_lastPhoto!).existsSync())
-                    ? Image.file(File(_lastPhoto!), fit: BoxFit.cover, cacheWidth: 150)
-                    : const Icon(Icons.photo_library, color: Colors.white70),
-              ),
-              Text(S.t('Storage', 'سٹوریج'), style: TextStyle(color: Colors.white70, fontSize: 11)),
-            ]),
-          ),
-          // شٹر
-          GestureDetector(
-            onTap: _capture,
-            child: Container(
-              width: 76,
-              height: 76,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                border: Border.all(color: Colors.white, width: 4),
-              ),
-              padding: const EdgeInsets.all(4),
-              child: Container(
-                margin: EdgeInsets.all(_recording ? 14 : 0),
-                decoration: BoxDecoration(
-                  shape: _recording ? BoxShape.rectangle : BoxShape.circle,
-                  borderRadius: _recording ? BorderRadius.circular(6) : null,
-                  color: _busy
-                      ? Colors.grey
-                      : (_mode == 1 ? Colors.red : const Color(0xFFFFC400)),
-                ),
-              ),
-            ),
-          ),
-          // ٹیمپلیٹ
-          GestureDetector(
-            onTap: () => _open(TemplateScreen(
-              geo: loc.state,
-              build: (g) {
-                _now = DateTime.now();
-                return _stampData(g);
-              },
-            )),
-            child: Column(mainAxisSize: MainAxisSize.min, children: [
-              const Icon(Icons.dashboard_customize, color: Colors.white, size: 34),
-              const SizedBox(height: 4),
-              Text(S.t('Template', 'ٹیمپلیٹ'), style: TextStyle(color: Colors.white70, fontSize: 11)),
-            ]),
-          ),
-        ],
+        children: [_galleryBtn(), _shutterBtn(), _templateBtn()],
       ),
     );
   }
