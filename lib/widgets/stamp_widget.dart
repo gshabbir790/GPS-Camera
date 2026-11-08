@@ -115,11 +115,11 @@ class StampWidget extends StatelessWidget {
         ],
       );
 
-  Widget _map(double size) {
+  Widget _map(double size, {bool stretch = false}) {
     if (!showMap) return const SizedBox.shrink();
     return Container(
       width: size,
-      height: size,
+      height: stretch ? null : size,
       margin: const EdgeInsets.only(right: 6),
       decoration: BoxDecoration(
         color: const Color(0xFF3A3A3A),
@@ -148,20 +148,23 @@ class StampWidget extends StatelessWidget {
       );
 
   // ---------- 1) ایڈوانس ----------
-  Widget _advance() => Row(
-        crossAxisAlignment: CrossAxisAlignment.end,
-        children: [
-          _map(92),
-          Expanded(
-            child: _box(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
-                children: [_titleRow(19), const SizedBox(height: 2), _lines()],
+  // نقشہ متن والے خانے کے برابر اونچا (خود پھیل جاتا ہے)
+  Widget _advance() => IntrinsicHeight(
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            _map(92, stretch: true),
+            Expanded(
+              child: _box(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [_titleRow(18), const SizedBox(height: 2), _lines(size: 10.5)],
+                ),
               ),
             ),
-          ),
-        ],
+          ],
+        ),
       );
 
   // ---------- 2) تاریخ و وقت ----------
