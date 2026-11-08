@@ -63,6 +63,30 @@ jobs:
           test -n "$PKG"
           sed "s/__PKG__/${PKG}/" android_overrides/MainActivity.kt.tpl > "$MAIN_KT"
 
+          # Video stamp (Media3 Transformer) dependencies
+          if [ -f android/app/build.gradle.kts ]; then
+            {
+              echo ''
+              echo 'dependencies {'
+              echo '    implementation("androidx.media3:media3-transformer:1.4.1")'
+              echo '    implementation("androidx.media3:media3-effect:1.4.1")'
+              echo '    implementation("androidx.media3:media3-common:1.4.1")'
+              echo '}'
+            } >> android/app/build.gradle.kts
+          elif [ -f android/app/build.gradle ]; then
+            {
+              echo ''
+              echo 'dependencies {'
+              echo "    implementation 'androidx.media3:media3-transformer:1.4.1'"
+              echo "    implementation 'androidx.media3:media3-effect:1.4.1'"
+              echo "    implementation 'androidx.media3:media3-common:1.4.1'"
+              echo '}'
+            } >> android/app/build.gradle
+          else
+            echo "ERROR: android/app/build.gradle(.kts) not found"
+            exit 1
+          fi
+
       # 5. Install Android SDK 36
       - name: Install Android SDK Platform 36
         shell: bash
