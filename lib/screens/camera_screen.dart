@@ -70,6 +70,9 @@ class _CameraScreenState extends State<CameraScreen> with WidgetsBindingObserver
   double _heading = 0, _magnet = 0;
 
   final _stampKey = GlobalKey();
+  double _fullRatio = 0.5; // 'Full' موڈ میں پریویو کا (چھوٹا/بڑا) تناسب
+
+  double _captureRatio() => s.ratio == 3 ? _fullRatio : s.ratioValue;
 
   @override
   void initState() {
@@ -408,7 +411,7 @@ class _CameraScreenState extends State<CameraScreen> with WidgetsBindingObserver
         srcPath: srcPath,
         outPath: outPath,
         stampPng: stampPng,
-        ratio: s.ratioValue,
+        ratio: _captureRatio(),
         maxWidth: maxW,
         jpgQuality: AppSettings.jpgQuality[s.quality],
         mirror: s.mirror,
@@ -845,40 +848,29 @@ class _CameraScreenState extends State<CameraScreen> with WidgetsBindingObserver
 
   Widget _portraitBody() => Column(
         children: [
-          _topBar(),
           Expanded(child: Center(child: _previewBox(false))),
-          _zoomChips(),
-          _modeBar(),
           _bottomBar(),
         ],
       );
 
-  /// فون آڑا (landscape) ہو تو: بائیں گیلری/ٹیمپلیٹ، درمیان پریویو، دائیں شٹر
+  /// فون آڑا (landscape) ہو تو: بائیں گیلری/رپورٹس/ٹیمپلیٹ، درمیان پریویو، دائیں فوٹو-ویڈیو اور شٹر
   Widget _landscapeBody() => Row(
         children: [
           SizedBox(
-            width: 88,
+            width: 84,
             child: Column(
               mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-              children: [_galleryBtn(), _templateBtn()],
+              children: [_galleryBtn(), _reportsBtn(), _templateBtn()],
             ),
           ),
-          Expanded(
-            child: Column(
-              children: [
-                _topBar(),
-                Expanded(child: Center(child: _previewBox(true))),
-                _zoomChips(),
-              ],
-            ),
-          ),
+          Expanded(child: Center(child: _previewBox(true))),
           SizedBox(
-            width: 104,
+            width: 100,
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                _modeBar(vertical: true),
-                const SizedBox(height: 10),
+                _modeToggle(),
+                const SizedBox(height: 14),
                 _shutterBtn(),
               ],
             ),
@@ -920,7 +912,7 @@ class _CameraScreenState extends State<CameraScreen> with WidgetsBindingObserver
             s.update(() => s.timer = v[(v.indexOf(s.timer) + 1) % v.length]);
           }, label: s.timer == 0 ? 'Off' : '${s.timer}s', active: s.timer > 0),
           _iconBtn(Icons.aspect_ratio, () {
-            s.update(() => s.ratio = (s.ratio + 1) % 3);
+            s.update(() => s.ratio = (s.ratio + 1) % 4);
           }, label: AppSettings.ratioLabels[s.ratio]),
           _iconBtn(Icons.grid_on, () => s.update(() => s.grid = !s.grid), active: s.grid),
           _iconBtn(Icons.text_fields, _editNote),
@@ -950,10 +942,20 @@ class _CameraScreenState extends State<CameraScreen> with WidgetsBindingObserver
       return const CircularProgressIndicator(color: Color(0xFFFFC400));
     }
     final ps = c.value.previewSize ?? const Size(1280, 720);
-    return AspectRatio(
-      aspectRatio: landscapeUi ? 1 / s.ratioValue : s.ratioValue,
-      child: ClipRect(
+    final full = s.ratio == 3;
+    final Widget Function(Widget) wrap = full
+        ? (w) => SizedBox.expand(child: w)
+        : (w) => AspectRatio(
+              aspectRatio: landscapeUi ? 1 / s.ratioValue : s.ratioValue,
+              child: w,
+            );
+    return wrap(
+      ClipRect(
         child: LayoutBuilder(builder: (context, box) {
+          if (full && box.maxWidth > 0 && box.maxHeight > 0) {
+            final a = box.maxWidth, b = box.maxHeight;
+            _fullRatio = a < b ? a / b : b / a;
+          }
           return GestureDetector(
             onTapUp: (d) => _focusAt(d, box),
             child: Stack(
@@ -977,10 +979,33 @@ class _CameraScreenState extends State<CameraScreen> with WidgetsBindingObserver
                   },
                 ),
                 if (s.grid) const IgnorePointer(child: CustomPaint(painter: _GridPainter())),
-                Positioned(top: 6, left: 6, child: _locChip()),
+                // اوپر کے آئیکن (پریویو کے اوپر، کالی پٹی نہیں)
+                Positioned(
+                  top: 0,
+                  left: 0,
+                  right: 0,
+                  child: Container(
+                    decoration: const BoxDecoration(
+                      gradient: LinearGradient(
+                        begin: Alignment.topCenter,
+                        end: Alignment.bottomCenter,
+                        colors: [Color(0x99000000), Color(0x00000000)],
+                      ),
+                    ),
+                    child: _topBar(),
+                  ),
+                ),
+                Positioned(top: 62, left: 6, child: _locChip()),
+                // زوم بٹن (دائیں کنارے پر عمودی)
+                Positioned(
+                  right: 6,
+                  top: 0,
+                  bottom: 0,
+                  child: Center(child: _zoomChips(vertical: true)),
+                ),
                 if (_pending > 0)
                   Positioned(
-                    top: 38,
+                    top: 94,
                     left: 6,
                     child: Container(
                       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
@@ -1001,7 +1026,7 @@ class _CameraScreenState extends State<CameraScreen> with WidgetsBindingObserver
                   ),
                 if (_mode == 1)
                   Positioned(
-                    top: 6,
+                    top: 62,
                     right: 6,
                     child: Container(
                       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
@@ -1052,30 +1077,35 @@ class _CameraScreenState extends State<CameraScreen> with WidgetsBindingObserver
     );
   }
 
-  Widget _zoomChips() {
-    Widget chip(String t, double z) {
+  Widget _zoomChips({bool vertical = false}) {
+    Widget chip(String text, double z) {
       final sel = (_zoom - z).abs() < 0.25;
       return GestureDetector(
         onTap: () => _setZoom(z),
         child: Container(
-          margin: const EdgeInsets.symmetric(horizontal: 4, vertical: 6),
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
+          margin: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+          padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 6),
           decoration: BoxDecoration(
-            color: sel ? const Color(0xFFFFC400) : Colors.white12,
+            color: sel ? const Color(0xFFFFC400) : Colors.black54,
             borderRadius: BorderRadius.circular(16),
           ),
-          child: Text(t,
+          child: Text(text,
               style: TextStyle(
-                  color: sel ? Colors.black : Colors.white, fontWeight: FontWeight.bold)),
+                  color: sel ? Colors.black : Colors.white,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 13)),
         ),
       );
     }
 
-    return Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+    final chips = <Widget>[
       chip('1x', 1),
       if (_maxZoom >= 2) chip('2x', 2),
       if (_maxZoom >= 3) chip('3x', 3),
-    ]);
+    ];
+    return vertical
+        ? Column(mainAxisSize: MainAxisSize.min, children: chips)
+        : Row(mainAxisAlignment: MainAxisAlignment.center, children: chips);
   }
 
   Widget _galleryBtn() => GestureDetector(
@@ -1141,12 +1171,58 @@ class _CameraScreenState extends State<CameraScreen> with WidgetsBindingObserver
         ]),
       );
 
+  Widget _reportsBtn() => GestureDetector(
+        onTap: () {
+          if (_recording) return;
+          _open(const ReportHomeScreen());
+        },
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          const Icon(Icons.assignment, color: Colors.white, size: 32),
+          const SizedBox(height: 4),
+          Text(S.t('Reports', 'رپورٹس'),
+              style: const TextStyle(color: Colors.white70, fontSize: 11)),
+        ]),
+      );
+
+  /// فوٹو / ویڈیو - چھوٹا عمودی سوئچ
+  Widget _modeToggle() {
+    Widget tab(String label, bool sel, VoidCallback onTap) => GestureDetector(
+          onTap: onTap,
+          child: Container(
+            width: 62,
+            margin: const EdgeInsets.symmetric(vertical: 2),
+            padding: const EdgeInsets.symmetric(vertical: 5),
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              color: sel ? const Color(0xFFFFC400) : Colors.white12,
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Text(label,
+                style: TextStyle(
+                    color: sel ? Colors.black : Colors.white,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 11)),
+          ),
+        );
+    return Column(mainAxisSize: MainAxisSize.min, children: [
+      tab(S.t('PHOTO', 'تصویر'), _mode == 0, () => _setMode(0)),
+      tab(S.t('VIDEO', 'ویڈیو'), _mode == 1, () => _setMode(1)),
+    ]);
+  }
+
   Widget _bottomBar() {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 0, 16, 10),
+      padding: const EdgeInsets.fromLTRB(8, 6, 8, 8),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [_galleryBtn(), _shutterBtn(), _templateBtn()],
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          _galleryBtn(),
+          _modeToggle(),
+          _shutterBtn(),
+          _reportsBtn(),
+          _templateBtn(),
+        ],
       ),
     );
   }

@@ -81,7 +81,7 @@ class SettingsScreen extends StatelessWidget {
                 value: s.ratio,
                 underline: const SizedBox(),
                 items: [
-                  for (var i = 0; i < 3; i++)
+                  for (var i = 0; i < 4; i++)
                     DropdownMenuItem(value: i, child: Text(AppSettings.ratioLabels[i])),
                 ],
                 onChanged: (v) => s.update(() => s.ratio = v ?? 0),
