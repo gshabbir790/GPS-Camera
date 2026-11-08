@@ -9,23 +9,41 @@ import android.graphics.Paint
 import android.graphics.Rect
 import android.media.ExifInterface
 import android.media.MediaActionSound
+import android.media.MediaMetadataRetriever
+import android.net.Uri
 import android.os.Build
 import android.os.Environment
 import android.provider.MediaStore
 import android.view.KeyEvent
+import androidx.media3.common.Effect
+import androidx.media3.common.MediaItem
+import androidx.media3.common.audio.AudioProcessor
+import androidx.media3.effect.BitmapOverlay
+import androidx.media3.effect.OverlayEffect
+import androidx.media3.effect.TextureOverlay
+import androidx.media3.transformer.Composition
+import androidx.media3.transformer.EditedMediaItem
+import androidx.media3.transformer.Effects
+import androidx.media3.transformer.ExportException
+import androidx.media3.transformer.ExportResult
+import androidx.media3.transformer.Transformer
+import com.google.common.collect.ImmutableList
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
 import java.io.File
 import java.io.FileOutputStream
 import kotlin.math.abs
+import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.roundToInt
 
+@androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
 class MainActivity : FlutterActivity() {
     private var volumeChannel: MethodChannel? = null
     private var intercept = false
     private var sound: MediaActionSound? = null
+    private var transformer: Transformer? = null
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
@@ -82,6 +100,13 @@ class MainActivity : FlutterActivity() {
                     }.start()
                 }
 
+                "burnVideo" -> {
+                    val src = call.argument<String>("src") ?: ""
+                    val out = call.argument<String>("out") ?: ""
+                    val stamp = call.argument<ByteArray>("stamp")
+                    burnVideo(src, out, stamp, result)
+                }
+
                 "saveToDownloads" -> {
                     try {
                         val path = call.argument<String>("path") ?: ""
@@ -122,7 +147,7 @@ class MainActivity : FlutterActivity() {
     /** تصویر: گھمانا (EXIF) + کراپ + سائز + مرر + اسٹیمپ + JPG - سب native */
     private fun composePhoto(
         src: String, out: String, stampBytes: ByteArray?,
-        ratio: Double, maxW: Int, quality: Int, mirror: Boolean
+        ratioIn: Double, maxW: Int, quality: Int, mirror: Boolean
     ) {
         // پہلے صرف سائز پڑھیں، پھر ضرورت کے مطابق چھوٹا کر کے ڈی کوڈ (تیز + کم میموری)
         val bounds = BitmapFactory.Options()
@@ -154,6 +179,8 @@ class MainActivity : FlutterActivity() {
 
         // مطلوبہ ریشو پر درمیان سے کراپ
         val cur = bmp.width.toDouble() / bmp.height
+        // آڑی (landscape) تصویر کے لیے ریشو الٹ
+        val ratio = if (cur > 1.0) 1.0 / ratioIn else ratioIn
         var cx = 0
         var cy = 0
         var cw = bmp.width
@@ -193,6 +220,73 @@ class MainActivity : FlutterActivity() {
 
         FileOutputStream(out).use { result.compress(Bitmap.CompressFormat.JPEG, quality, it) }
         result.recycle()
+    }
+
+    /** ویڈیو پر لوکیشن اسٹیمپ (Media3 Transformer) - ہر فریم پر */
+    private fun burnVideo(src: String, out: String, stampBytes: ByteArray?, result: MethodChannel.Result) {
+        try {
+            if (stampBytes == null) {
+                result.error("BURN", "no stamp", null)
+                return
+            }
+            val stamp = BitmapFactory.decodeByteArray(stampBytes, 0, stampBytes.size)
+            val mmr = MediaMetadataRetriever()
+            mmr.setDataSource(src)
+            var w = mmr.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_WIDTH)?.toIntOrNull() ?: 0
+            var h = mmr.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_HEIGHT)?.toIntOrNull() ?: 0
+            val rot = mmr.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_ROTATION)?.toIntOrNull() ?: 0
+            mmr.release()
+            if (rot == 90 || rot == 270) {
+                val tmp = w
+                w = h
+                h = tmp
+            }
+            if (stamp == null || w <= 0 || h <= 0) {
+                result.error("BURN", "bad input", null)
+                return
+            }
+            // فریم کے برابر شفاف تصویر، اسٹیمپ نیچے (چوڑائی کے مطابق)
+            val overlayBmp = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
+            val canvas = Canvas(overlayBmp)
+            val sh = (stamp.height.toDouble() * w / stamp.width).roundToInt()
+            canvas.drawBitmap(
+                stamp, Rect(0, 0, stamp.width, stamp.height),
+                Rect(0, h - sh, w, h), Paint(Paint.FILTER_BITMAP_FLAG or Paint.ANTI_ALIAS_FLAG)
+            )
+            stamp.recycle()
+
+            val overlay = BitmapOverlay.createStaticBitmapOverlay(overlayBmp)
+            val videoEffects = ImmutableList.of<Effect>(
+                OverlayEffect(ImmutableList.of<TextureOverlay>(overlay))
+            )
+            val effects = Effects(ImmutableList.of<AudioProcessor>(), videoEffects)
+            val item = EditedMediaItem.Builder(MediaItem.fromUri(Uri.fromFile(File(src))))
+                .setEffects(effects)
+                .build()
+
+            val t = Transformer.Builder(this)
+                .addListener(object : Transformer.Listener {
+                    override fun onCompleted(composition: Composition, exportResult: ExportResult) {
+                        overlayBmp.recycle()
+                        result.success(true)
+                    }
+
+                    override fun onError(
+                        composition: Composition,
+                        exportResult: ExportResult,
+                        exportException: ExportException
+                    ) {
+                        overlayBmp.recycle()
+                        result.error("BURN", exportException.message, null)
+                    }
+                })
+                .build()
+            transformer = t
+            File(out).delete()
+            t.start(item, out)
+        } catch (e: Throwable) {
+            result.error("BURN", e.message, null)
+        }
     }
 
     override fun onKeyDown(keyCode: Int, event: KeyEvent?): Boolean {
