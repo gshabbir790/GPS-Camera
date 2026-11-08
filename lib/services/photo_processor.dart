@@ -31,12 +31,14 @@ Future<String> processPhoto(ProcessArgs a) async {
 
   // مطلوبہ ریشو پر کراپ
   final cur = im.width / im.height;
-  if ((cur - a.ratio).abs() > 0.01) {
-    if (cur > a.ratio) {
-      final nw = (im.height * a.ratio).round();
+  // آڑی (landscape) تصویر کے لیے ریشو الٹ
+  final ratio = cur > 1 ? 1 / a.ratio : a.ratio;
+  if ((cur - ratio).abs() > 0.01) {
+    if (cur > ratio) {
+      final nw = (im.height * ratio).round();
       im = img.copyCrop(im, x: ((im.width - nw) / 2).round(), y: 0, width: nw, height: im.height);
     } else {
-      final nh = (im.width / a.ratio).round();
+      final nh = (im.width / ratio).round();
       im = img.copyCrop(im, x: 0, y: ((im.height - nh) / 2).round(), width: im.width, height: nh);
     }
   }
