@@ -63,13 +63,13 @@ class AppSettings extends ChangeNotifier {
       ];
 
   static const ratioValues = [3 / 4, 9 / 16, 1.0]; // چوڑائی / اونچائی (پورٹریٹ)
-  static const ratioLabels = ['4:3', '16:9', '1:1'];
+  static const ratioLabels = ['4:3', '16:9', '1:1', 'Full'];
   static List<String> get qualityLabels =>
       [S.t('High', 'ہائی'), S.t('Medium', 'درمیانی'), S.t('Low', 'کم')];
   static const maxWidths = [2160, 1600, 1080];
   static const jpgQuality = [92, 85, 75];
 
-  double get ratioValue => ratioValues[ratio];
+  double get ratioValue => ratio < ratioValues.length ? ratioValues[ratio] : 0.5; // 3 = Full (پوری اسکرین)
 
   Future<void> load() async {
     final p = _p = await SharedPreferences.getInstance();
