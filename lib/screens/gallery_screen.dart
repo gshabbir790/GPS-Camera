@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import '../l10n/strings.dart';
 import '../services/photo_meta.dart';
+import '../widgets/ad_banner.dart';
 import '../services/photo_store.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
@@ -39,6 +40,7 @@ class _GalleryScreenState extends State<GalleryScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: Text(S.t('Storage (${_files.length})', 'سٹوریج (${_files.length})'))),
+      bottomNavigationBar: const SafeArea(child: AdBanner()),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : _files.isEmpty

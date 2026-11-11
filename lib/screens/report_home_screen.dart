@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../l10n/strings.dart';
+import '../widgets/ad_banner.dart';
 import '../widgets/report_widgets.dart';
 import 'before_after_screen.dart';
 import 'photo_report_screen.dart';
@@ -42,6 +43,7 @@ class ReportHomeScreen extends StatelessWidget {
     return Scaffold(
       backgroundColor: const Color(0xFFF2F4F8),
       appBar: AppBar(title: Text(S.t('Reports', 'رپورٹس'))),
+      bottomNavigationBar: const SafeArea(child: AdBanner()),
       body: ListView(padding: const EdgeInsets.all(18), children: [
         _card(
           context,

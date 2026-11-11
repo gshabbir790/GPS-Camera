@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
 
+import '../ads/ad_service.dart';
 import '../l10n/strings.dart';
 import '../services/net.dart';
 import '../services/photo_store.dart';
@@ -27,6 +28,7 @@ class _GateScreenState extends State<GateScreen> with WidgetsBindingObserver {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    WidgetsBinding.instance.addPostFrameCallback((_) => AdService.init());
     _check();
     _timer = Timer.periodic(const Duration(seconds: 2), (_) => _check());
   }

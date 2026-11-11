@@ -5,6 +5,7 @@ import '../l10n/strings.dart';
 
 import '../models/app_settings.dart';
 import '../models/stamp_data.dart';
+import '../widgets/ad_banner.dart';
 import '../widgets/credit_banner.dart';
 import '../widgets/map_type_sheet.dart';
 import 'report_settings_screen.dart';
@@ -17,6 +18,7 @@ class SettingsScreen extends StatelessWidget {
     final s = AppSettings.instance;
     return Scaffold(
       appBar: AppBar(title: Text(S.t('Settings', 'سیٹنگز'))),
+      bottomNavigationBar: const SafeArea(child: AdBanner()),
       body: ListenableBuilder(
         listenable: s,
         builder: (context, _) => ListView(
