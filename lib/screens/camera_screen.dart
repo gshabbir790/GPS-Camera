@@ -22,6 +22,9 @@ import '../services/photo_processor.dart';
 import '../widgets/stamp_widget.dart';
 import '../widgets/exit_guard.dart';
 import '../services/photo_meta.dart';
+import '../services/photo_store.dart';
+import '../services/usage_stats.dart';
+import '../config/app_config.dart';
 import 'gallery_screen.dart';
 import 'report_home_screen.dart';
 import 'settings_screen.dart';
@@ -87,7 +90,13 @@ class _CameraScreenState extends State<CameraScreen> with WidgetsBindingObserver
     loc.start();
     _tick = Timer.periodic(const Duration(seconds: 1), (_) {
       if (mounted && !_busy) setState(() => _now = DateTime.now());
+      final p = loc.lastPos;
+      if (p != null && s.statsConsent == 1) {
+        final g = loc.state.value;
+        UsageStats.ping(lat: p.latitude, lon: p.longitude, place: g.manual ? '' : g.title);
+      }
     });
+    WidgetsBinding.instance.addPostFrameCallback((_) => _askStatsConsent());
     _initCamera();
     _syncSensors();
     _loadLast();
@@ -392,9 +401,7 @@ class _CameraScreenState extends State<CameraScreen> with WidgetsBindingObserver
 
       final g = loc.state.value;
       final snapTime = _now;
-      final docs = await getApplicationDocumentsDirectory();
-      final photos = Directory('${docs.path}/photos');
-      if (!photos.existsSync()) photos.createSync(recursive: true);
+      final photos = PhotoStore.saveDir(); // GPS Camera فولڈر یا اندرونی فولڈر
 
       final name = s.buildFileName(snapTime, g.lat, g.lon);
       var outPath = '${photos.path}/$name';
@@ -440,7 +447,17 @@ class _CameraScreenState extends State<CameraScreen> with WidgetsBindingObserver
     try {
       await _compose(a);
 
-      if (s.saveGallery) {
+      if (PhotoStore.publicOk) {
+        // فائل پہلے ہی فون کے "GPS Camera" فولڈر میں ہے - صرف گیلری کو بتانا
+        await PhotoStore.scan(a.outPath);
+        if (s.saveOriginal) {
+          try {
+            final orig = '${PhotoStore.rootPath}/ORIG_${a.outPath.split('/').last}';
+            File(a.srcPath).copySync(orig);
+            await PhotoStore.scan(orig);
+          } catch (_) {}
+        }
+      } else if (s.saveGallery) {
         try {
           if (!await Gal.hasAccess(toAlbum: true)) {
             await Gal.requestAccess(toAlbum: true);
@@ -559,13 +576,17 @@ class _CameraScreenState extends State<CameraScreen> with WidgetsBindingObserver
       // اسٹیمپ لگانا پس منظر میں (ویڈیو کی لمبائی کے مطابق وقت لگتا ہے)
       _pending++;
       if (mounted) setState(() {});
-      unawaited(_finishVideo(f.path, stamp));
+      final g = loc.state.value;
+      final vName = s
+          .buildFileName(DateTime.now(), g.lat, g.lon)
+          .replaceFirst(RegExp(r'\.jpg$'), '.mp4');
+      unawaited(_finishVideo(f.path, stamp, vName));
     } catch (e) {
       _toast(S.t('Error: $e', 'خرابی: $e'));
     }
   }
 
-  Future<void> _finishVideo(String path, Uint8List? stamp) async {
+  Future<void> _finishVideo(String path, Uint8List? stamp, String vName) async {
     final out = '$path.stamped.mp4';
     var burned = false;
     try {
@@ -579,8 +600,19 @@ class _CameraScreenState extends State<CameraScreen> with WidgetsBindingObserver
         }
       }
       final finalPath = burned ? out : path;
-      if (!await Gal.hasAccess(toAlbum: true)) await Gal.requestAccess(toAlbum: true);
-      await Gal.putVideo(finalPath, album: 'GPS Camera');
+      if (PhotoStore.publicOk) {
+        var dest = '${PhotoStore.rootPath}/$vName';
+        var n = 1;
+        while (File(dest).existsSync()) {
+          dest = '${PhotoStore.rootPath}/${vName.replaceFirst('.mp4', '')}_$n.mp4';
+          n++;
+        }
+        File(finalPath).copySync(dest);
+        await PhotoStore.scan(dest);
+      } else {
+        if (!await Gal.hasAccess(toAlbum: true)) await Gal.requestAccess(toAlbum: true);
+        await Gal.putVideo(finalPath, album: 'GPS Camera');
+      }
       _toast(burned
           ? S.t('Video saved with location stamp ✓', 'ویڈیو لوکیشن اسٹیمپ کے ساتھ محفوظ ہو گئی ✓')
           : S.t('Video saved (stamp could not be added)',
@@ -645,13 +677,28 @@ class _CameraScreenState extends State<CameraScreen> with WidgetsBindingObserver
     );
   }
 
+  Future<void> _askStatsConsent() async {
+    if (!mounted || !AppConfig.statsReady || s.statsConsent != -1) return;
+    final ok = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        title: Text(S.t('Help improve GPS Camera?', 'GPS Camera کو بہتر بنانے میں مدد کریں؟')),
+        content: Text(S.t(
+            'Share anonymous usage info with the developer: app version, phone model and your approximate area (about 1 km). Your photos are never uploaded. You can change this anytime in Settings.',
+            'ڈویلپر کے ساتھ گمنام معلومات شیئر کریں: ایپ کا ورژن، فون کا ماڈل اور آپ کا تقریبی علاقہ (تقریباً 1 کلومیٹر)۔ آپ کی تصاویر کبھی اپلوڈ نہیں ہوتیں۔ آپ سیٹنگز میں کبھی بھی بدل سکتے ہیں۔')),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(S.t('No thanks', 'نہیں شکریہ'))),
+          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: Text(S.t('Allow', 'اجازت ہے'))),
+        ],
+      ),
+    );
+    s.update(() => s.statsConsent = ok == true ? 1 : 0);
+  }
+
   Future<void> _loadLast() async {
     try {
-      final docs = await getApplicationDocumentsDirectory();
-      final dir = Directory('${docs.path}/photos');
-      if (!dir.existsSync()) return;
-      final files = dir.listSync().whereType<File>().where((f) => f.path.endsWith('.jpg')).toList()
-        ..sort((a, b) => b.lastModifiedSync().compareTo(a.lastModifiedSync()));
+      final files = await PhotoStore.allPhotos();
       if (files.isNotEmpty && mounted) setState(() => _lastPhoto = files.first.path);
     } catch (_) {}
   }

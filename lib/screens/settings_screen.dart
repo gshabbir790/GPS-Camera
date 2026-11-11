@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import '../app_info.dart';
+import '../config/app_config.dart';
 import '../l10n/strings.dart';
 
 import '../models/app_settings.dart';
@@ -191,6 +193,15 @@ class SettingsScreen extends StatelessWidget {
               onTap: () => Navigator.push(
                   context, MaterialPageRoute(builder: (_) => const ReportSettingsScreen())),
             ),
+            if (AppConfig.statsReady)
+              SwitchListTile(
+                secondary: const Icon(Icons.insights),
+                title: Text(S.t('Share anonymous usage info', 'گمنام استعمال کی معلومات شیئر کریں')),
+                subtitle: Text(S.t('App version, phone model, approximate area (~1 km)',
+                    'ایپ ورژن، فون ماڈل، تقریبی علاقہ (~1 کلومیٹر)')),
+                value: s.statsConsent == 1,
+                onChanged: (v) => s.update(() => s.statsConsent = v ? 1 : 0),
+              ),
             _header(S.t('Storage and share', 'سٹوریج اور شیئر')),
             SwitchListTile(
               secondary: const Icon(Icons.photo_library),
@@ -214,7 +225,7 @@ class SettingsScreen extends StatelessWidget {
             ),
             const SizedBox(height: 20),
             const CreditBanner(),
-            const Center(child: Text('GPS Camera 1.0.0', style: TextStyle(color: Colors.black45))),
+            const Center(child: Text('GPS Camera $kAppVersion', style: TextStyle(color: Colors.black45))),
             const SizedBox(height: 24),
           ],
         ),

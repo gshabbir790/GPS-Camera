@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import '../l10n/strings.dart';
 import '../services/photo_meta.dart';
+import '../services/photo_store.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 
@@ -25,13 +26,7 @@ class _GalleryScreenState extends State<GalleryScreen> {
   }
 
   Future<void> _load() async {
-    final docs = await getApplicationDocumentsDirectory();
-    final dir = Directory('${docs.path}/photos');
-    var list = <File>[];
-    if (dir.existsSync()) {
-      list = dir.listSync().whereType<File>().where((f) => f.path.endsWith('.jpg')).toList()
-        ..sort((a, b) => b.lastModifiedSync().compareTo(a.lastModifiedSync()));
-    }
+    final list = await PhotoStore.allPhotos();
     if (mounted) {
       setState(() {
         _files = list;
@@ -125,6 +120,7 @@ class _Viewer extends StatelessWidget {
                 try {
                   file.deleteSync();
                   deleteMeta(file.path);
+                  PhotoStore.scan(file.path);
                 } catch (_) {}
                 if (context.mounted) Navigator.pop(context);
               }

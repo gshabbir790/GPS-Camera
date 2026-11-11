@@ -5,6 +5,7 @@ import 'package:geolocator/geolocator.dart';
 
 import '../l10n/strings.dart';
 import '../services/net.dart';
+import '../services/photo_store.dart';
 import '../widgets/exit_guard.dart';
 import 'camera_screen.dart';
 
@@ -17,7 +18,7 @@ class GateScreen extends StatefulWidget {
 }
 
 class _GateScreenState extends State<GateScreen> with WidgetsBindingObserver {
-  bool _gps = false, _perm = false, _net = false;
+  bool _gps = false, _perm = false, _net = false, _store = false, _skip = false;
   bool _checked = false, _busy = false, _asked = false, _done = false;
   bool _foreverDenied = false;
   Timer? _timer;
@@ -54,15 +55,17 @@ class _GateScreenState extends State<GateScreen> with WidgetsBindingObserver {
       }
       final perm = p == LocationPermission.always || p == LocationPermission.whileInUse;
       final net = await hasInternet();
+      final store = await PhotoStore.refresh();
       if (!mounted) return;
       setState(() {
         _gps = gps;
         _perm = perm;
         _net = net;
+        _store = store;
         _foreverDenied = p == LocationPermission.deniedForever;
         _checked = true;
       });
-      if (gps && perm && net) {
+      if (gps && perm && net && (store || _skip)) {
         _done = true;
         _timer?.cancel();
         if (!mounted) return;
@@ -185,6 +188,26 @@ class _GateScreenState extends State<GateScreen> with WidgetsBindingObserver {
                     title: S.t('Internet (Wi-Fi or mobile data)', 'انٹرنیٹ (Wi-Fi یا موبائل ڈیٹا)'),
                     hint: S.t('Turn on Wi-Fi or mobile data', 'Wi-Fi یا موبائل ڈیٹا آن کریں'),
                   ),
+                  _tile(
+                    ok: _store,
+                    icon: Icons.folder_special,
+                    title: S.t('Storage access (GPS Camera folder)', 'سٹوریج رسائی (GPS Camera فولڈر)'),
+                    hint: S.t('Allow "All files access" so photos are saved in the GPS Camera folder on your phone',
+                        '"All files access" کی اجازت دیں تاکہ تصاویر فون کے GPS Camera فولڈر میں محفوظ ہوں'),
+                    action: S.t('Allow', 'اجازت دیں'),
+                    onAction: () => PhotoStore.requestAllFiles(),
+                  ),
+                  if (_checked && !_store)
+                    TextButton(
+                      onPressed: () {
+                        setState(() => _skip = true);
+                        _check();
+                      },
+                      child: Text(
+                        S.t('Continue without GPS Camera folder', 'GPS Camera فولڈر کے بغیر جاری رکھیں'),
+                        style: const TextStyle(color: Colors.white70, fontSize: 12),
+                      ),
+                    ),
                   const SizedBox(height: 16),
                   OutlinedButton.icon(
                     onPressed: _check,
