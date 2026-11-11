@@ -18,7 +18,7 @@ class GateScreen extends StatefulWidget {
 }
 
 class _GateScreenState extends State<GateScreen> with WidgetsBindingObserver {
-  bool _gps = false, _perm = false, _net = false, _store = false, _skip = false;
+  bool _gps = false, _perm = false, _net = false, _permGranted = false;
   bool _checked = false, _busy = false, _asked = false, _done = false;
   bool _foreverDenied = false;
   Timer? _timer;
@@ -53,19 +53,20 @@ class _GateScreenState extends State<GateScreen> with WidgetsBindingObserver {
         _asked = true;
         p = await Geolocator.requestPermission();
       }
-      final perm = p == LocationPermission.always || p == LocationPermission.whileInUse;
+      final granted = p == LocationPermission.always || p == LocationPermission.whileInUse;
+      final precise = granted ? await PhotoStore.hasFineLocation() : false;
+      final perm = granted && precise;
       final net = await hasInternet();
-      final store = await PhotoStore.refresh();
       if (!mounted) return;
       setState(() {
         _gps = gps;
         _perm = perm;
         _net = net;
-        _store = store;
+        _permGranted = granted;
         _foreverDenied = p == LocationPermission.deniedForever;
         _checked = true;
       });
-      if (gps && perm && net && (store || _skip)) {
+      if (gps && perm && net) {
         _done = true;
         _timer?.cancel();
         if (!mounted) return;
@@ -81,7 +82,7 @@ class _GateScreenState extends State<GateScreen> with WidgetsBindingObserver {
   }
 
   Future<void> _fixPermission() async {
-    if (_foreverDenied) {
+    if (_foreverDenied || _permGranted) {
       await Geolocator.openAppSettings();
     } else {
       await Geolocator.requestPermission();
@@ -175,11 +176,17 @@ class _GateScreenState extends State<GateScreen> with WidgetsBindingObserver {
                     ok: _perm,
                     icon: Icons.verified_user,
                     title: S.t('Location permission', 'لوکیشن کی اجازت'),
-                    hint: _foreverDenied
-                        ? S.t('Open App settings → Permissions → Location → Allow',
-                            'ایپ سیٹنگ → Permissions → Location → Allow')
-                        : S.t('Please allow location access', 'لوکیشن کی اجازت دیں'),
-                    action: _foreverDenied ? S.t('Settings', 'سیٹنگ') : S.t('Allow', 'اجازت دیں'),
+                    hint: _permGranted
+                        ? S.t('Only approximate location is allowed. Open Settings → Permissions → Location → turn on "Use precise location"',
+                            'صرف تقریبی لوکیشن کی اجازت ہے۔ Settings → Permissions → Location میں "Use precise location" آن کریں')
+                        : (_foreverDenied
+                            ? S.t('Open App settings → Permissions → Location → Allow',
+                                'ایپ سیٹنگ → Permissions → Location → Allow')
+                            : S.t('Please allow location access (choose Precise)',
+                                'لوکیشن کی اجازت دیں ("Precise" منتخب کریں)')),
+                    action: (_foreverDenied || _permGranted)
+                        ? S.t('Settings', 'سیٹنگ')
+                        : S.t('Allow', 'اجازت دیں'),
                     onAction: _fixPermission,
                   ),
                   _tile(
@@ -188,26 +195,6 @@ class _GateScreenState extends State<GateScreen> with WidgetsBindingObserver {
                     title: S.t('Internet (Wi-Fi or mobile data)', 'انٹرنیٹ (Wi-Fi یا موبائل ڈیٹا)'),
                     hint: S.t('Turn on Wi-Fi or mobile data', 'Wi-Fi یا موبائل ڈیٹا آن کریں'),
                   ),
-                  _tile(
-                    ok: _store,
-                    icon: Icons.folder_special,
-                    title: S.t('Storage access (GPS Camera folder)', 'سٹوریج رسائی (GPS Camera فولڈر)'),
-                    hint: S.t('Allow "All files access" so photos are saved in the GPS Camera folder on your phone',
-                        '"All files access" کی اجازت دیں تاکہ تصاویر فون کے GPS Camera فولڈر میں محفوظ ہوں'),
-                    action: S.t('Allow', 'اجازت دیں'),
-                    onAction: () => PhotoStore.requestAllFiles(),
-                  ),
-                  if (_checked && !_store)
-                    TextButton(
-                      onPressed: () {
-                        setState(() => _skip = true);
-                        _check();
-                      },
-                      child: Text(
-                        S.t('Continue without GPS Camera folder', 'GPS Camera فولڈر کے بغیر جاری رکھیں'),
-                        style: const TextStyle(color: Colors.white70, fontSize: 12),
-                      ),
-                    ),
                   const SizedBox(height: 16),
                   OutlinedButton.icon(
                     onPressed: _check,
