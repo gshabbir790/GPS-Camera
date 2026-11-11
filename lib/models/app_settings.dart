@@ -1,3 +1,5 @@
+import 'dart:math';
+
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -14,7 +16,7 @@ class AppSettings extends ChangeNotifier {
 
   // کیمرہ
   int quality = 0; // 0 High, 1 Medium, 2 Low
-  int ratio = 0; // 0 = 4:3, 1 = 16:9, 2 = 1:1
+  int ratio = 1; // 0 = 4:3, 1 = 16:9 (9:16 پوری اسکرین)، 2 = 1:1، 3 = Full
   bool grid = false;
   int timer = 0; // 0, 3, 5, 10
   bool sound = true;
@@ -44,6 +46,11 @@ class AppSettings extends ChangeNotifier {
   String rpFooter = '';
   bool rpShowDate = true;
   bool rpShowLinks = true;
+
+  // استعمال کی معلومات
+  int statsConsent = -1; // -1 نہیں پوچھا، 0 نہیں، 1 ہاں
+  String installId = '';
+  String firstSeen = '';
 
   // دستی لوکیشن
   bool manualOn = false;
@@ -86,10 +93,24 @@ class AppSettings extends ChangeNotifier {
     mLon = p.getDouble('mLon') ?? mLon;
     mTitle = p.getString('mTitle') ?? mTitle;
     mAddress = p.getString('mAddress') ?? mAddress;
+    statsConsent = p.getInt('statsConsent') ?? statsConsent;
+    installId = p.getString('installId') ?? '';
+    firstSeen = p.getString('firstSeen') ?? '';
+    if (installId.isEmpty) {
+      final r = Random.secure();
+      installId = List.generate(16, (_) => r.nextInt(256).toRadixString(16).padLeft(2, '0')).join();
+      firstSeen = DateTime.now().toUtc().toIso8601String();
+    }
     lang = p.getString('lang') ?? lang;
     S.lang = lang;
     quality = p.getInt('quality') ?? quality;
-    ratio = p.getInt('ratio') ?? ratio;
+    // ورژن 2.7.9: ڈیفالٹ ریشو 9:16 (پوری اسکرین) - پرانی سیٹنگ ایک بار بدلی جائے گی
+    if ((p.getInt('prefsVersion') ?? 0) < 279) {
+      ratio = 1;
+      await p.setInt('prefsVersion', 279);
+    } else {
+      ratio = p.getInt('ratio') ?? ratio;
+    }
     grid = p.getBool('grid') ?? grid;
     timer = p.getInt('timer') ?? timer;
     sound = p.getBool('sound') ?? sound;
@@ -136,6 +157,9 @@ class AppSettings extends ChangeNotifier {
     await p.setString('mTitle', mTitle);
     await p.setString('mAddress', mAddress);
     await p.setString('lang', lang);
+    await p.setInt('statsConsent', statsConsent);
+    await p.setString('installId', installId);
+    await p.setString('firstSeen', firstSeen);
     await p.setInt('quality', quality);
     await p.setInt('ratio', ratio);
     await p.setBool('grid', grid);
