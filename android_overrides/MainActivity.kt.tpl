@@ -8,7 +8,10 @@ import android.graphics.Matrix
 import android.graphics.Paint
 import android.graphics.Rect
 import android.media.ExifInterface
+import android.content.Intent
 import android.media.MediaActionSound
+import android.media.MediaScannerConnection
+import android.provider.Settings
 import android.media.MediaMetadataRetriever
 import android.net.Uri
 import android.os.Build
@@ -98,6 +101,53 @@ class MainActivity : FlutterActivity() {
                             runOnUiThread { result.error("COMPOSE", e.message, null) }
                         }
                     }.start()
+                }
+
+                "hasAllFilesAccess" -> {
+                    val ok = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                        Environment.isExternalStorageManager()
+                    } else {
+                        true
+                    }
+                    result.success(ok)
+                }
+
+                "requestAllFilesAccess" -> {
+                    try {
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                            val i = Intent(
+                                Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION,
+                                Uri.parse("package:" + packageName)
+                            )
+                            startActivity(i)
+                        }
+                        result.success(true)
+                    } catch (e: Exception) {
+                        try {
+                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                                startActivity(Intent(Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION))
+                            }
+                            result.success(true)
+                        } catch (e2: Exception) {
+                            result.error("PERM", e2.message, null)
+                        }
+                    }
+                }
+
+                "scanFile" -> {
+                    val path = (call.arguments as? String) ?: ""
+                    if (path.isNotEmpty()) {
+                        MediaScannerConnection.scanFile(this, arrayOf(path), null, null)
+                    }
+                    result.success(true)
+                }
+
+                "deviceInfo" -> {
+                    val m = HashMap<String, Any>()
+                    m["model"] = Build.MANUFACTURER + " " + Build.MODEL
+                    m["android"] = Build.VERSION.RELEASE ?: ""
+                    m["sdk"] = Build.VERSION.SDK_INT
+                    result.success(m)
                 }
 
                 "burnVideo" -> {
