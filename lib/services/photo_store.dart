@@ -41,22 +41,19 @@ class PhotoStore {
     } catch (_) {}
   }
 
-  /// اجازت اور فولڈر لکھنے کے قابل ہونے کی جانچ
+  /// Play Store کے مطابق: کوئی اضافی اجازت نہیں - تصاویر گیلری (Pictures/GPS Camera) میں جاتی ہیں
   static Future<bool> refresh() async {
     _publicOk = false;
-    if (await hasAllFiles()) {
-      try {
-        final d = Directory(rootPath);
-        if (!d.existsSync()) d.createSync(recursive: true);
-        final t = File('${d.path}/.write_test');
-        t.writeAsStringSync('1');
-        t.deleteSync();
-        _publicOk = true;
-      } catch (_) {
-        _publicOk = false;
-      }
+    return false;
+  }
+
+  /// لوکیشن کی "Precise" (درست) اجازت ملی ہے یا صرف تقریبی؟
+  static Future<bool> hasFineLocation() async {
+    try {
+      return (await _ch.invokeMethod<bool>('hasFineLocation')) != false;
+    } catch (_) {
+      return true;
     }
-    return _publicOk;
   }
 
   static Directory saveDir() {
