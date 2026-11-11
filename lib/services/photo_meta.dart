@@ -1,10 +1,10 @@
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:path_provider/path_provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../models/stamp_data.dart';
+import 'photo_store.dart';
 
 /// ہر تصویر کے ساتھ محفوظ لوکیشن کی معلومات (photo.jpg.json)
 class PhotoMeta {
@@ -27,10 +27,12 @@ Future<bool> openMaps(double lat, double lon) async {
   }
 }
 
+String _metaPath(String photoPath) => '${PhotoStore.metaDir}/${photoPath.split('/').last}.json';
+
 void writeMeta(String photoPath,
     {required double lat, required double lon, required DateTime time, String title = ''}) {
   try {
-    File('$photoPath.json').writeAsStringSync(jsonEncode({
+    File(_metaPath(photoPath)).writeAsStringSync(jsonEncode({
       'lat': lat,
       'lon': lon,
       'time': time.toIso8601String(),
@@ -41,7 +43,8 @@ void writeMeta(String photoPath,
 
 PhotoMeta? readMeta(String photoPath) {
   try {
-    final f = File('$photoPath.json');
+    var f = File(_metaPath(photoPath));
+    if (!f.existsSync()) f = File('$photoPath.json'); // پرانا طریقہ
     if (!f.existsSync()) return null;
     final j = jsonDecode(f.readAsStringSync()) as Map<String, dynamic>;
     final lat = (j['lat'] as num).toDouble();
@@ -55,8 +58,10 @@ PhotoMeta? readMeta(String photoPath) {
 
 void deleteMeta(String photoPath) {
   try {
-    final f = File('$photoPath.json');
-    if (f.existsSync()) f.deleteSync();
+    for (final p in [_metaPath(photoPath), '$photoPath.json']) {
+      final f = File(p);
+      if (f.existsSync()) f.deleteSync();
+    }
   } catch (_) {}
 }
 
@@ -64,11 +69,4 @@ void deleteMeta(String photoPath) {
 String fmtDateTime(DateTime t) =>
     '${StampData.weekday(t)}, ${StampData.p2(t.day)}/${StampData.p2(t.month)}/${t.year} ${StampData.clock(t)}';
 
-Future<List<File>> listPhotoFiles() async {
-  final docs = await getApplicationDocumentsDirectory();
-  final dir = Directory('${docs.path}/photos');
-  if (!dir.existsSync()) return [];
-  final list = dir.listSync().whereType<File>().where((f) => f.path.endsWith('.jpg')).toList()
-    ..sort((a, b) => b.lastModifiedSync().compareTo(a.lastModifiedSync()));
-  return list;
-}
+Future<List<File>> listPhotoFiles() => PhotoStore.allPhotos();
