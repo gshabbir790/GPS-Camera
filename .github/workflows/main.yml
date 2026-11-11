@@ -43,7 +43,7 @@ jobs:
 
           flutter create \
             --platforms=android \
-            --org com.hassan \
+            --org com.gsabbir \
             --project-name gps_camera \
             --no-pub \
             /tmp/gps-camera-scaffold
