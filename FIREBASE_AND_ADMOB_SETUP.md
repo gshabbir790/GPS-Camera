@@ -33,3 +33,8 @@ service cloud.firestore {
 2. App ID (`ca-app-pub-xxxx~yyyy`) aur Banner/Interstitial **Ad unit IDs** copy karein.
 3. Mujhe ye IDs den (ya test IDs se shuru karein) — main `google_mobile_ads` package, manifest ki App ID aur banner (Settings / Reports / Storage screens par) jod dunga. Camera screen par ad nahi lagana chahiye.
 4. Zaroori: Privacy Policy, UMP (consent) message, aur AdMob mein app ki verification.
+
+## C) Package name
+Ab app ka package name `com.gsabbir.gps_camera` hai (workflow mein `--org com.gsabbir`).
+Firebase mein bhi isi naam se Android app register hai. `google-services.json` is setup (REST) mein zaroori nahi.
+Naya package naam hone ki wajah se ye purani `com.hassan.gps_camera` app ke upar update nahi hogi — alag app ki tarah install hogi.
