@@ -8,7 +8,9 @@ import android.graphics.Matrix
 import android.graphics.Paint
 import android.graphics.Rect
 import android.media.ExifInterface
+import android.Manifest
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.media.MediaActionSound
 import android.media.MediaScannerConnection
 import android.provider.Settings
@@ -101,6 +103,12 @@ class MainActivity : FlutterActivity() {
                             runOnUiThread { result.error("COMPOSE", e.message, null) }
                         }
                     }.start()
+                }
+
+                "hasFineLocation" -> {
+                    val ok = checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) ==
+                        PackageManager.PERMISSION_GRANTED
+                    result.success(ok)
                 }
 
                 "hasAllFilesAccess" -> {
