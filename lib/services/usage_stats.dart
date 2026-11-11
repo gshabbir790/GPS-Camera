@@ -59,13 +59,27 @@ class UsageStats {
         ],
       });
 
-      final url = Uri.parse(
-          'https://firestore.googleapis.com/v1/projects/${AppConfig.firebaseProjectId}/databases/(default)/documents:commit?key=${AppConfig.firebaseApiKey}');
-      final req = await client.postUrl(url);
-      req.headers.set('Content-Type', 'application/json');
-      req.add(utf8.encode(body));
-      final res = await req.close().timeout(const Duration(seconds: 15));
-      await res.drain<void>();
+      Future<int> post(String key, {bool asAndroid = false}) async {
+        final url = Uri.parse(
+            'https://firestore.googleapis.com/v1/projects/${AppConfig.firebaseProjectId}/databases/(default)/documents:commit?key=$key');
+        final req = await client.postUrl(url);
+        req.headers.set('Content-Type', 'application/json');
+        if (asAndroid) {
+          // Android کے لیے محدود (restricted) key کی شناخت
+          req.headers.set('X-Android-Package', AppConfig.androidPackage);
+          req.headers.set('X-Android-Cert', AppConfig.androidCertSha1);
+        }
+        req.add(utf8.encode(body));
+        final res = await req.close().timeout(const Duration(seconds: 15));
+        await res.drain<void>();
+        return res.statusCode;
+      }
+
+      var code = await post(AppConfig.firebaseApiKey);
+      if (code != 200 && AppConfig.firebaseAndroidKey.isNotEmpty) {
+        code = await post(AppConfig.firebaseAndroidKey, asAndroid: true);
+      }
+      if (code != 200) _sent = false; // اگلی بار دوبارہ کوشش
     } catch (_) {
       // خاموشی سے نظر انداز - ایپ پر کوئی اثر نہیں
     } finally {
