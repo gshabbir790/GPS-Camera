@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import 'l10n/strings.dart';
 import 'models/app_settings.dart';
 import 'screens/splash_screen.dart';
+import 'services/photo_store.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -13,6 +14,7 @@ Future<void> main() async {
     DeviceOrientation.landscapeRight,
   ]);
   await AppSettings.instance.load();
+  await PhotoStore.init();
   runApp(const GpsCameraApp());
 }
 
