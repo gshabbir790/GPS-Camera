@@ -5,7 +5,15 @@ on:
   push:
     branches: [main, master]
     tags: ['v*']
+    paths-ignore:
+      - 'docs/**'
+      - '**/*.md'
   workflow_dispatch:
+
+# نئی push آنے پر پرانی چلتی/قطار والی runs خود بخود cancel ہو جائیں
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
 
 permissions:
   contents: write
@@ -267,6 +275,20 @@ jobs:
         run: dart run flutter_launcher_icons
 
       # 12. Build ONE universal APK
+      - name: Disable Android lint-vital (lint tool crashes on JDK 17 with newer plugins)
+        run: |
+          mkdir -p ~/.gradle/init.d
+          {
+            echo 'allprojects {'
+            echo '  tasks.configureEach { t ->'
+            echo '    if (t.name.startsWith("lintVital") || t.name.startsWith("lintAnalyze")) {'
+            echo '      t.enabled = false'
+            echo '    }'
+            echo '  }'
+            echo '}'
+          } > ~/.gradle/init.d/no-lint.gradle
+          cat ~/.gradle/init.d/no-lint.gradle
+
       - name: Build Universal APK
         shell: bash
         run: |
