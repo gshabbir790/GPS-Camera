@@ -150,11 +150,42 @@ class MainActivity : FlutterActivity() {
                     result.success(true)
                 }
 
+                "signatureSha1" -> {
+                    try {
+                        var sig: ByteArray? = null
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                            val info = packageManager.getPackageInfo(
+                                packageName, PackageManager.GET_SIGNING_CERTIFICATES
+                            )
+                            sig = info.signingInfo?.apkContentsSigners?.firstOrNull()?.toByteArray()
+                        } else {
+                            @Suppress("DEPRECATION")
+                            val info = packageManager.getPackageInfo(
+                                packageName, PackageManager.GET_SIGNATURES
+                            )
+                            @Suppress("DEPRECATION")
+                            sig = info.signatures?.firstOrNull()?.toByteArray()
+                        }
+                        if (sig == null) {
+                            result.success("")
+                        } else {
+                            val md = java.security.MessageDigest.getInstance("SHA-1")
+                            val d = md.digest(sig)
+                            val sb = StringBuilder()
+                            for (b in d) sb.append(String.format("%02X", b))
+                            result.success(sb.toString())
+                        }
+                    } catch (e: Exception) {
+                        result.success("")
+                    }
+                }
+
                 "deviceInfo" -> {
                     val m = HashMap<String, Any>()
                     m["model"] = Build.MANUFACTURER + " " + Build.MODEL
                     m["android"] = Build.VERSION.RELEASE ?: ""
                     m["sdk"] = Build.VERSION.SDK_INT
+                    m["id"] = Settings.Secure.getString(contentResolver, Settings.Secure.ANDROID_ID) ?: ""
                     result.success(m)
                 }
 
