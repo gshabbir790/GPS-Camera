@@ -14,5 +14,11 @@ class AppConfig {
   static const androidPackage = 'com.gsabbir.gps_camera';
   static const androidCertSha1 = '6135B773FE37CDA2A5066A1988702683EAD6D865';
 
+  /// ایپ کے سائننگ سرٹیفکیٹ کا SHA-1 (ci/debug.keystore) - بدلی ہوئی/غیر سرکاری APK پہچاننے کے لیے
+  static const expectedCertSha1 = '6135B773FE37CDA2A5066A1988702683EAD6D865';
+
+  /// Firestore نہ ملے تو آخری کامیاب جانچ کے بعد کتنے گھنٹے ایپ چلنے دی جائے
+  static const graceHours = 72;
+
   static bool get statsReady => firebaseProjectId.isNotEmpty && firebaseApiKey.isNotEmpty;
 }
