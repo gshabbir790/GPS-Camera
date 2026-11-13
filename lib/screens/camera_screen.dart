@@ -23,6 +23,7 @@ import '../widgets/stamp_widget.dart';
 import '../widgets/exit_guard.dart';
 import '../services/photo_meta.dart';
 import '../services/photo_store.dart';
+import '../services/remote_guard.dart';
 import '../services/usage_stats.dart';
 import '../config/app_config.dart';
 import 'gallery_screen.dart';
@@ -678,6 +679,11 @@ class _CameraScreenState extends State<CameraScreen> with WidgetsBindingObserver
   }
 
   Future<void> _askStatsConsent() async {
+    final tl = RemoteGuard.trialDaysLeft;
+    if (tl != null && mounted) {
+      RemoteGuard.trialDaysLeft = null;
+      _toast(S.t('Free trial: $tl day(s) left', 'مفت آزمائش: $tl دن باقی'));
+    }
     if (!mounted || !AppConfig.statsReady || s.statsConsent != -1) return;
     final ok = await showDialog<bool>(
       context: context,

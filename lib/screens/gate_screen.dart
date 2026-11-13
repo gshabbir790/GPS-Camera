@@ -8,7 +8,7 @@ import '../l10n/strings.dart';
 import '../services/net.dart';
 import '../services/photo_store.dart';
 import '../widgets/exit_guard.dart';
-import 'camera_screen.dart';
+import 'guard_screen.dart';
 
 /// ایپ کھلنے سے پہلے: لوکیشن (GPS) آن + اجازت + انٹرنیٹ لازمی
 class GateScreen extends StatefulWidget {
@@ -74,7 +74,7 @@ class _GateScreenState extends State<GateScreen> with WidgetsBindingObserver {
         if (!mounted) return;
         Navigator.of(context).pushReplacement(PageRouteBuilder(
           transitionDuration: const Duration(milliseconds: 400),
-          pageBuilder: (_, __, ___) => const CameraScreen(),
+          pageBuilder: (_, __, ___) => const GuardScreen(),
           transitionsBuilder: (_, a, __, child) => FadeTransition(opacity: a, child: child),
         ));
       }
