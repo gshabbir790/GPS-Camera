@@ -70,6 +70,8 @@ jobs:
           PKG="$(grep -m1 '^package ' "$MAIN_KT" | sed 's/^package //' | tr -d '\r ')"
           test -n "$PKG"
           sed "s/__PKG__/${PKG}/" android_overrides/MainActivity.kt.tpl > "$MAIN_KT"
+          APP_KT="$(dirname "$MAIN_KT")/App.kt"
+          sed "s/__PKG__/${PKG}/" android_overrides/App.kt.tpl > "$APP_KT"
 
           # Video stamp (Media3 Transformer) dependencies
           if [ -f android/app/build.gradle.kts ]; then
