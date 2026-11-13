@@ -8,6 +8,7 @@ on:
     paths-ignore:
       - 'docs/**'
       - '**/*.md'
+      - '.github/workflows/cleanup-queue.yml'
   workflow_dispatch:
 
 # نئی push آنے پر پرانی چلتی/قطار والی runs خود بخود cancel ہو جائیں

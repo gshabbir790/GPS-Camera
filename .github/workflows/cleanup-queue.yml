@@ -1,0 +1,37 @@
+name: Cleanup stuck runs
+
+on:
+  workflow_dispatch:
+
+permissions:
+  actions: write
+  contents: read
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Force-cancel stuck runs, then delete cancelled ones
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          THIS_RUN: ${{ github.run_id }}
+        run: |
+          for st in queued pending waiting; do
+            ids=$(gh api "repos/$REPO/actions/runs?status=$st&per_page=100" --paginate --jq '.workflow_runs[].id' || true)
+            for id in $ids; do
+              if [ "$id" = "$THIS_RUN" ]; then continue; fi
+              echo "force-cancel $id ($st)"
+              gh api -X POST "repos/$REPO/actions/runs/$id/force-cancel" || true
+            done
+          done
+
+          sleep 30
+
+          ids=$(gh api "repos/$REPO/actions/runs?status=cancelled&per_page=100" --paginate --jq '.workflow_runs[].id' || true)
+          for id in $ids; do
+            echo "delete $id"
+            gh api -X DELETE "repos/$REPO/actions/runs/$id" || true
+          done
+          echo "Done"
