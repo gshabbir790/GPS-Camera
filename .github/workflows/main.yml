@@ -98,6 +98,43 @@ jobs:
             exit 1
           fi
 
+          # R8 fix: WorkManager (comes with Google Mobile Ads) crashed at app start
+          # ("Failed to create an instance of androidx.work.impl.WorkDatabase")
+          {
+            echo ''
+            echo 'android.r8.strictFullModeForKeepRules=false'
+          } >> android/gradle.properties
+          {
+            echo '-keep class androidx.work.** { *; }'
+            echo '-keep class androidx.startup.** { *; }'
+            echo '-keep class * extends androidx.room.RoomDatabase { *; }'
+            echo '-keepclassmembers class * extends androidx.room.RoomDatabase { <init>(...); }'
+            echo '-dontwarn androidx.work.**'
+          } > android/app/extra-proguard-rules.pro
+          if [ -f android/app/build.gradle.kts ]; then
+            {
+              echo ''
+              echo 'android {'
+              echo '    buildTypes {'
+              echo '        getByName("release") {'
+              echo '            proguardFiles("extra-proguard-rules.pro")'
+              echo '        }'
+              echo '    }'
+              echo '}'
+            } >> android/app/build.gradle.kts
+          else
+            {
+              echo ''
+              echo 'android {'
+              echo '    buildTypes {'
+              echo '        release {'
+              echo "            proguardFiles 'extra-proguard-rules.pro'"
+              echo '        }'
+              echo '    }'
+              echo '}'
+            } >> android/app/build.gradle
+          fi
+
       # 5. Install Android SDK 36
       - name: Install Android SDK Platform 36
         shell: bash
