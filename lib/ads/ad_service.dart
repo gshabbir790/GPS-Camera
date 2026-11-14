@@ -13,12 +13,20 @@ class AdService {
   /// debug بلڈ میں ٹیسٹ اشتہار، release میں اصلی
   static String get bannerUnitId => kDebugMode ? _bannerTest : _bannerReal;
 
+  /// ⚠️ اگر ایپ کھلتے ہی کریش ہو رہی تھی تو اشتہارات عارضی طور پر بند ہیں۔
+  /// کریش ٹھیک ہونے کے بعد true کریں۔
+  static const bool adsEnabled = false;
+
   static Future<void>? _init;
   static bool canRequest = false;
 
   static Future<void> init() => _init ??= _doInit();
 
   static Future<void> _doInit() async {
+    if (!adsEnabled) {
+      canRequest = false;
+      return;
+    }
     try {
       final done = Completer<void>();
       ConsentInformation.instance.requestConsentInfoUpdate(
