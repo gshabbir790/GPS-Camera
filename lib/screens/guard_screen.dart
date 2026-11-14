@@ -24,6 +24,7 @@ class _GuardScreenState extends State<GuardScreen> {
   RemoteConfig _cfg = const RemoteConfig();
   Map<String, String> _dev = {'id': '', 'model': '', 'android': ''};
   DateTime? _expiry;
+  String _sha = '';
 
   @override
   void initState() {
@@ -43,19 +44,25 @@ class _GuardScreenState extends State<GuardScreen> {
   Future<void> _run() async {
     if (mounted) setState(() => _phase = _Phase.checking);
     try {
-      // 1) غیر سرکاری / بدلی ہوئی APK
-      final sha = await RemoteGuard.signatureSha1();
-      if (AppConfig.expectedCertSha1.isNotEmpty &&
-          sha.isNotEmpty &&
-          sha != AppConfig.expectedCertSha1.toUpperCase()) {
+      final cfg = await RemoteGuard.fetchConfig();
+      if (cfg != null) _cfg = cfg;
+
+      // 1) غیر سرکاری / بدلی ہوئی APK (اجازت شدہ SHA-1 Firebase کے certSha1 فیلڈ سے بھی بدلا جا سکتا ہے)
+      _sha = await RemoteGuard.signatureSha1();
+      final allowedList = (cfg != null && cfg.certSha1.trim().isNotEmpty
+              ? cfg.certSha1
+              : AppConfig.expectedCertSha1)
+          .split(',')
+          .map((e) => e.replaceAll(RegExp(r'[^0-9A-Fa-f]'), '').toUpperCase())
+          .where((e) => e.isNotEmpty)
+          .toList();
+      if (allowedList.isNotEmpty && _sha.isNotEmpty && !allowedList.contains(_sha)) {
         _set(_Phase.tamper);
         return;
       }
 
       // 2) لازمی اپڈیٹ
-      final cfg = await RemoteGuard.fetchConfig();
       if (cfg != null) {
-        _cfg = cfg;
         if (cfg.minVersion.isNotEmpty && RemoteGuard.isOlder(kAppVersion, cfg.minVersion)) {
           _set(_Phase.update);
           return;
@@ -263,9 +270,26 @@ class _GuardScreenState extends State<GuardScreen> {
           S.t('This copy of GPS Camera was modified or is not from the official developer. Please install the official app.',
               'GPS Camera کی یہ کاپی بدلی ہوئی ہے یا سرکاری ڈویلپر کی نہیں۔ براہ کرم سرکاری ایپ انسٹال کریں۔'),
           [
+            if (_sha.isNotEmpty) ...[
+              Text(S.t('Certificate (SHA-1)', 'سرٹیفکیٹ (SHA-1)'),
+                  style: const TextStyle(color: Colors.white54, fontSize: 11)),
+              SelectableText(_sha,
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(color: Colors.white70, fontSize: 11)),
+              TextButton.icon(
+                onPressed: () {
+                  Clipboard.setData(ClipboardData(text: _sha));
+                  ScaffoldMessenger.of(context)
+                      .showSnackBar(SnackBar(content: Text(S.t('Copied', 'کاپی ہو گیا'))));
+                },
+                icon: const Icon(Icons.copy, size: 16),
+                label: Text(S.t('Copy', 'کاپی')),
+              ),
+            ],
             if (_cfg.updateUrl.isNotEmpty)
               _btn(S.t('Get official app', 'سرکاری ایپ حاصل کریں'), Icons.download,
                   () => _open(_cfg.updateUrl)),
+            _btn(S.t('Check again', 'دوبارہ چیک کریں'), Icons.refresh, _run, filled: false),
           ],
         );
 
