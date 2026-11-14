@@ -10,6 +10,7 @@ enum LicenseState { allowed, trial, denied, expired, unverified }
 class RemoteConfig {
   final String minVersion, latestVersion, updateUrl, updateMessage;
   final String whatsapp, priceText, contactMessage;
+  final String certSha1; // اجازت شدہ سائننگ SHA-1 (کاما سے الگ)، خالی = ایپ میں لکھی ہوئی
   final bool licenseRequired;
   final int trialDays;
 
@@ -21,6 +22,7 @@ class RemoteConfig {
     this.whatsapp = '',
     this.priceText = '',
     this.contactMessage = '',
+    this.certSha1 = '',
     this.licenseRequired = false,
     this.trialDays = 0,
   });
@@ -89,6 +91,7 @@ class RemoteGuard {
       whatsapp: fsStr(f, 'whatsapp').replaceAll(RegExp(r'[^0-9]'), ''),
       priceText: fsStr(f, 'priceText'),
       contactMessage: fsStr(f, 'contactMessage'),
+      certSha1: fsStr(f, 'certSha1'),
       licenseRequired: fsBool(f, 'licenseRequired'),
       trialDays: fsInt(f, 'trialDays'),
     );
