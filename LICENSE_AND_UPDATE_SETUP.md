@@ -46,6 +46,7 @@ Firestore → **Start collection** → ID: `config` → Document ID: `app` → f
 | `updateUrl` | string | GitHub Release / Drive link | "Update now" button yahan le jata hai |
 | `updateMessage` | string | `Naya version aa gaya hai` | Update screen ka paigham |
 | `licenseRequired` | **boolean** | `false` | `true` karte hi sirf approved devices chalenge |
+| `certSha1` | string | `6135B773...D865` | (ikhtiyari) ijazat shuda signing SHA-1; khali ho to app mein likhi hui wali. Kai ho to comma se alag |
 | `trialDays` | **number** | `3` | Naye device ko itne din muft (0 = koi trial nahi) |
 | `whatsapp` | string | `923001234567` | Khareedne ke liye WhatsApp number (country code ke saath, + ke baghair) |
 | `priceText` | string | `Rs 1500 / saal` | Locked screen par dikhega |
