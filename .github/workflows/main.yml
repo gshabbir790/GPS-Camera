@@ -111,12 +111,23 @@ jobs:
             echo '-keepclassmembers class * extends androidx.room.RoomDatabase { <init>(...); }'
             echo '-dontwarn androidx.work.**'
           } > android/app/extra-proguard-rules.pro
+          # Fixed signing key (same certificate on every build => updates install over old app)
+          cp ci/debug.keystore android/app/release.keystore
           if [ -f android/app/build.gradle.kts ]; then
             {
               echo ''
               echo 'android {'
+              echo '    signingConfigs {'
+              echo '        create("fixed") {'
+              echo '            storeFile = file("release.keystore")'
+              echo '            storePassword = "android"'
+              echo '            keyAlias = "androiddebugkey"'
+              echo '            keyPassword = "android"'
+              echo '        }'
+              echo '    }'
               echo '    buildTypes {'
               echo '        getByName("release") {'
+              echo '            signingConfig = signingConfigs.getByName("fixed")'
               echo '            proguardFiles("extra-proguard-rules.pro")'
               echo '        }'
               echo '    }'
@@ -126,8 +137,17 @@ jobs:
             {
               echo ''
               echo 'android {'
+              echo '    signingConfigs {'
+              echo '        fixed {'
+              echo "            storeFile file('release.keystore')"
+              echo "            storePassword 'android'"
+              echo "            keyAlias 'androiddebugkey'"
+              echo "            keyPassword 'android'"
+              echo '        }'
+              echo '    }'
               echo '    buildTypes {'
               echo '        release {'
+              echo '            signingConfig signingConfigs.fixed'
               echo "            proguardFiles 'extra-proguard-rules.pro'"
               echo '        }'
               echo '    }'
