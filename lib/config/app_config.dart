@@ -15,7 +15,8 @@ class AppConfig {
   static const androidCertSha1 = '6135B773FE37CDA2A5066A1988702683EAD6D865';
 
   /// ایپ کے سائننگ سرٹیفکیٹ کا SHA-1 (ci/debug.keystore) - بدلی ہوئی/غیر سرکاری APK پہچاننے کے لیے
-  static const expectedCertSha1 = '6135B773FE37CDA2A5066A1988702683EAD6D865';
+  static const expectedCertSha1 =
+      '6135B773FE37CDA2A5066A1988702683EAD6D865,D10814C17E9EA8E14C7853449AA4D562D89331FC';
 
   /// Firestore نہ ملے تو آخری کامیاب جانچ کے بعد کتنے گھنٹے ایپ چلنے دی جائے
   static const graceHours = 72;
