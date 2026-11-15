@@ -24,6 +24,8 @@ import '../widgets/exit_guard.dart';
 import '../services/photo_meta.dart';
 import '../services/photo_store.dart';
 import '../services/remote_guard.dart';
+import '../services/support_service.dart';
+import '../widgets/ad_banner.dart';
 import '../services/usage_stats.dart';
 import '../config/app_config.dart';
 import 'gallery_screen.dart';
@@ -98,6 +100,7 @@ class _CameraScreenState extends State<CameraScreen> with WidgetsBindingObserver
       }
     });
     WidgetsBinding.instance.addPostFrameCallback((_) => _askStatsConsent());
+    SupportService.refreshUnread();
     _initCamera();
     _syncSensors();
     _loadLast();
@@ -906,6 +909,7 @@ class _CameraScreenState extends State<CameraScreen> with WidgetsBindingObserver
         children: [
           Expanded(child: Center(child: _previewBox(false))),
           _bottomBar(),
+          const AdBanner(), // کیمرہ بٹن کے نیچے اشتہار
         ],
       );
 
@@ -935,14 +939,22 @@ class _CameraScreenState extends State<CameraScreen> with WidgetsBindingObserver
       );
 
   Widget _iconBtn(IconData icon, VoidCallback onTap,
-      {String? label, bool active = false}) {
+      {String? label, bool active = false, bool dot = false}) {
     return InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(24),
       child: Padding(
         padding: const EdgeInsets.all(8),
         child: Column(mainAxisSize: MainAxisSize.min, children: [
-          Icon(icon, color: active ? const Color(0xFFFFC400) : Colors.white, size: 24),
+          Stack(clipBehavior: Clip.none, children: [
+            Icon(icon, color: active ? const Color(0xFFFFC400) : Colors.white, size: 24),
+            if (dot)
+              const Positioned(
+                right: -2,
+                top: -2,
+                child: CircleAvatar(radius: 5, backgroundColor: Colors.red),
+              ),
+          ]),
           if (label != null)
             Text(label,
                 style: TextStyle(
@@ -976,9 +988,13 @@ class _CameraScreenState extends State<CameraScreen> with WidgetsBindingObserver
             _front = !_front;
             _initCamera();
           }),
-          _iconBtn(Icons.settings, () {
-            _open(const SettingsScreen());
-          }),
+          ValueListenableBuilder<bool>(
+            valueListenable: SupportService.unread,
+            builder: (_, hasNew, __) => _iconBtn(Icons.settings, () async {
+              await _open(const SettingsScreen());
+              SupportService.refreshUnread();
+            }, dot: hasNew),
+          ),
         ],
       ),
     );

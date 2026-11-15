@@ -5,10 +5,14 @@ import '../l10n/strings.dart';
 
 import '../models/app_settings.dart';
 import '../models/stamp_data.dart';
+import 'package:url_launcher/url_launcher.dart';
+
 import '../widgets/ad_banner.dart';
 import '../widgets/credit_banner.dart';
 import '../widgets/map_type_sheet.dart';
+import '../services/support_service.dart';
 import 'report_settings_screen.dart';
+import 'support_screen.dart';
 
 class SettingsScreen extends StatelessWidget {
   const SettingsScreen({super.key});
@@ -224,6 +228,37 @@ class SettingsScreen extends StatelessWidget {
               title: Text(S.t('Open share after each photo', 'ہر تصویر کے بعد شیئر کھولیں')),
               value: s.shareAfter,
               onChanged: (v) => s.update(() => s.shareAfter = v),
+            ),
+            ValueListenableBuilder<bool>(
+              valueListenable: SupportService.unread,
+              builder: (context, hasNew, _) => ListTile(
+                leading: Stack(clipBehavior: Clip.none, children: [
+                  const Icon(Icons.support_agent),
+                  if (hasNew)
+                    const Positioned(
+                      right: -2,
+                      top: -2,
+                      child: CircleAvatar(radius: 5, backgroundColor: Colors.red),
+                    ),
+                ]),
+                title: Text(S.t('Contact developer / Feedback', 'ڈویلپر سے رابطہ / فیڈ بیک')),
+                subtitle: Text(hasNew
+                    ? S.t('New reply from developer', 'ڈویلپر کا نیا جواب آیا ہے')
+                    : S.t('Report a problem or ask a question', 'مسئلہ بتائیں یا سوال پوچھیں')),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: () async {
+                  await Navigator.push(
+                      context, MaterialPageRoute(builder: (_) => const SupportScreen()));
+                  SupportService.refreshUnread();
+                },
+              ),
+            ),
+            ListTile(
+              leading: const Icon(Icons.privacy_tip),
+              title: Text(S.t('Privacy Policy', 'پرائیویسی پالیسی')),
+              subtitle: Text('Install ID: ${s.installId}', style: const TextStyle(fontSize: 11)),
+              trailing: const Icon(Icons.open_in_new),
+              onTap: () => launchUrl(Uri.parse(kPrivacyUrl), mode: LaunchMode.externalApplication),
             ),
             const SizedBox(height: 20),
             const CreditBanner(),
