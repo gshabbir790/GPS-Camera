@@ -18,11 +18,12 @@ class UsageStats {
     _sent = true;
     final client = HttpClient()..connectionTimeout = const Duration(seconds: 10);
     try {
-      var model = '', android = '';
+      var model = '', android = '', devId = '';
       try {
         final info = Map<String, dynamic>.from(await _ch.invokeMethod('deviceInfo') as Map);
         model = (info['model'] ?? '').toString();
         android = (info['android'] ?? '').toString();
+        devId = (info['id'] ?? '').toString();
       } catch (_) {}
 
       // درستگی ~1 کلومیٹر تک گھٹائی گئی (privacy)
@@ -43,10 +44,11 @@ class UsageStats {
                 'lon': {'doubleValue': rLon},
                 'place': {'stringValue': place},
                 'firstSeen': {'timestampValue': s.firstSeen},
+                'deviceId': {'stringValue': devId},
               },
             },
             'updateMask': {
-              'fieldPaths': ['version', 'model', 'android', 'lat', 'lon', 'place', 'firstSeen'],
+              'fieldPaths': ['version', 'model', 'android', 'lat', 'lon', 'place', 'firstSeen', 'deviceId'],
             },
             'updateTransforms': [
               {'fieldPath': 'lastSeen', 'setToServerValue': 'REQUEST_TIME'},
