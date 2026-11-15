@@ -685,21 +685,24 @@ class _CameraScreenState extends State<CameraScreen> with WidgetsBindingObserver
       _toast(S.t('Free trial: $tl day(s) left', 'مفت آزمائش: $tl دن باقی'));
     }
     if (!mounted || !AppConfig.statsReady || s.statsConsent != -1) return;
-    final ok = await showDialog<bool>(
+    await showDialog<void>(
       context: context,
       barrierDismissible: false,
-      builder: (ctx) => AlertDialog(
-        title: Text(S.t('Help improve GPS Camera?', 'GPS Camera کو بہتر بنانے میں مدد کریں؟')),
-        content: Text(S.t(
-            'Share anonymous usage info with the developer: app version, phone model and your approximate area (about 1 km). Your photos are never uploaded. You can change this anytime in Settings.',
-            'ڈویلپر کے ساتھ گمنام معلومات شیئر کریں: ایپ کا ورژن، فون کا ماڈل اور آپ کا تقریبی علاقہ (تقریباً 1 کلومیٹر)۔ آپ کی تصاویر کبھی اپلوڈ نہیں ہوتیں۔ آپ سیٹنگز میں کبھی بھی بدل سکتے ہیں۔')),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(S.t('No thanks', 'نہیں شکریہ'))),
-          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: Text(S.t('Allow', 'اجازت ہے'))),
-        ],
+      builder: (ctx) => PopScope(
+        canPop: false,
+        child: AlertDialog(
+          title: Text(S.t('Help improve GPS Camera', 'GPS Camera کو بہتر بنانے میں مدد کریں')),
+          content: Text(S.t('Your photos are never shared.', 'آپ کی تصاویر کبھی شیئر نہیں ہوتیں۔')),
+          actions: [
+            FilledButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: Text(S.t('Allow', 'اجازت ہے')),
+            ),
+          ],
+        ),
       ),
     );
-    s.update(() => s.statsConsent = ok == true ? 1 : 0);
+    s.update(() => s.statsConsent = 1);
   }
 
   Future<void> _loadLast() async {
