@@ -13,9 +13,8 @@ class AdService {
   /// debug بلڈ میں ٹیسٹ اشتہار، release میں اصلی
   static String get bannerUnitId => kDebugMode ? _bannerTest : _bannerReal;
 
-  /// ⚠️ اگر ایپ کھلتے ہی کریش ہو رہی تھی تو اشتہارات عارضی طور پر بند ہیں۔
-  /// کریش ٹھیک ہونے کے بعد true کریں۔
-  static const bool adsEnabled = false;
+  /// اشتہارات آن/آف کا سوئچ (false = بند)
+  static const bool adsEnabled = true;
 
   static Future<void>? _init;
   static bool canRequest = false;
