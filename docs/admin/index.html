@@ -1,0 +1,297 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex,nofollow">
+<title>GPS Camera – Admin</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<style>
+  :root{--y:#ffc400;--n:#1a1f4d;--bg:#f2f4f8}
+  *{box-sizing:border-box}
+  body{margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;background:var(--bg);color:#1b1f2a}
+  header{background:var(--n);color:#fff;padding:10px 14px;display:flex;align-items:center;gap:10px;position:sticky;top:0;z-index:20}
+  header h1{font-size:17px;margin:0;flex:1}
+  header button{background:transparent;border:1px solid #fff5;color:#fff;border-radius:8px;padding:5px 10px}
+  nav{display:flex;background:#fff;border-bottom:2px solid var(--y);position:sticky;top:46px;z-index:19;overflow-x:auto}
+  nav button{flex:1;min-width:90px;border:0;background:#fff;padding:12px 8px;font-size:14px;font-weight:600;color:#555;position:relative}
+  nav button.on{color:var(--n);border-bottom:3px solid var(--n)}
+  .badge{background:#e53935;color:#fff;border-radius:10px;font-size:11px;padding:1px 6px;margin-left:4px}
+  main{padding:12px;max-width:1000px;margin:0 auto}
+  .card{background:#fff;border-radius:12px;padding:12px;margin-bottom:12px;box-shadow:0 1px 4px #0001}
+  .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px}
+  .stat{background:#fff;border-radius:12px;padding:12px;text-align:center;box-shadow:0 1px 4px #0001}
+  .stat b{display:block;font-size:26px;color:var(--n)}
+  .stat span{font-size:12px;color:#666}
+  table{width:100%;border-collapse:collapse;font-size:13px}
+  th,td{padding:6px 5px;border-bottom:1px solid #eee;text-align:left;vertical-align:top}
+  th{color:#666;font-weight:600}
+  .scroll{overflow-x:auto}
+  #map{height:320px;border-radius:12px}
+  input,select,textarea,button{font:inherit}
+  input,textarea{border:1px solid #cfd3dc;border-radius:8px;padding:7px;width:100%}
+  .btn{background:var(--n);color:#fff;border:0;border-radius:8px;padding:8px 14px;font-weight:600}
+  .btn.y{background:var(--y);color:#000}
+  .btn.r{background:#e53935}
+  .row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+  .tk{padding:10px;border-bottom:1px solid #eee;cursor:pointer}
+  .tk.un{background:#fff7d6;font-weight:600}
+  .tk small{color:#666;display:block}
+  .msgs{max-height:55vh;overflow:auto;padding:6px}
+  .m{max-width:80%;margin:5px 0;padding:8px 10px;border-radius:12px;white-space:pre-wrap;word-break:break-word}
+  .m.user{background:#e8eaf2;margin-right:auto}
+  .m.admin{background:#ffe08a;margin-left:auto}
+  .m small{display:block;font-size:10px;color:#555;margin-top:2px}
+  #login{max-width:360px;margin:12vh auto;padding:20px}
+  .hide{display:none!important}
+  label{font-size:12px;color:#555;display:block;margin:8px 0 2px}
+  .ok{color:#2e7d32}.bad{color:#c62828}
+</style>
+</head>
+<body>
+
+<div id="login" class="card">
+  <h2>GPS Camera – Admin</h2>
+  <label>Email</label><input id="em" type="email" autocomplete="username">
+  <label>Password</label><input id="pw" type="password" autocomplete="current-password">
+  <p><button class="btn" id="loginBtn" style="width:100%">Login</button></p>
+  <p id="lerr" class="bad"></p>
+</div>
+
+<div id="app" class="hide">
+  <header><h1>GPS Camera – Admin</h1><button id="out">Logout</button></header>
+  <nav>
+    <button data-t="dash" class="on">Dashboard</button>
+    <button data-t="sup">Support <span id="supBadge" class="badge hide">0</span></button>
+    <button data-t="dev">Devices</button>
+    <button data-t="cfg">Settings</button>
+  </nav>
+  <main>
+    <section id="t-dash">
+      <div class="grid" id="stats"></div>
+      <div class="card" style="margin-top:12px"><div id="map"></div></div>
+      <div class="card"><b>Versions</b><div class="scroll" id="vers"></div></div>
+      <div class="card"><b>Top places</b><div class="scroll" id="places"></div></div>
+      <div class="card"><b>All installs (latest first)</b><div class="scroll" id="inst"></div></div>
+    </section>
+
+    <section id="t-sup" class="hide">
+      <div id="tkList" class="card"></div>
+      <div id="tkView" class="card hide">
+        <div class="row"><button class="btn" id="tkBack">← Back</button><b id="tkTitle"></b></div>
+        <div id="tkInfo" style="font-size:12px;color:#555;margin:6px 0"></div>
+        <div class="msgs" id="msgs"></div>
+        <div class="row" style="margin-top:8px">
+          <textarea id="reply" rows="2" placeholder="Write reply..." style="flex:1"></textarea>
+          <button class="btn y" id="sendReply">Send</button>
+        </div>
+      </div>
+    </section>
+
+    <section id="t-dev" class="hide">
+      <div class="card">
+        <b>Approve a device by ID</b>
+        <div class="row" style="margin-top:6px"><input id="newId" placeholder="Device ID"><button class="btn y" id="addDev">Allow</button></div>
+      </div>
+      <div class="card"><input id="devSearch" placeholder="Search ID / model"><div class="scroll" id="devs" style="margin-top:8px"></div></div>
+    </section>
+
+    <section id="t-cfg" class="hide">
+      <div class="card" id="cfgForm"></div>
+    </section>
+  </main>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/13.2.0/firebase-app.js";
+import { getAuth, signInWithEmailAndPassword, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/13.2.0/firebase-auth.js";
+import { getFirestore, collection, doc, onSnapshot, query, orderBy, addDoc, setDoc, updateDoc, serverTimestamp, increment } from "https://www.gstatic.com/firebasejs/13.2.0/firebase-firestore.js";
+
+// ===== Firebase web config (Project settings → Your apps → Web app) =====
+const firebaseConfig = {
+  apiKey: "AIzaSyALtNdUPsCIQ5jK84C0JLp_r0hJHgLMVMQ",
+  authDomain: "gps-camera-9af65.firebaseapp.com",
+  projectId: "gps-camera-9af65",
+  storageBucket: "gps-camera-9af65.firebasestorage.app",
+  messagingSenderId: "165291844049",
+  appId: "1:165291844049:web:4570ca140e194929ec00f0"
+};
+
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+const db = getFirestore(app);
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const dt = (t) => { try { return t && t.toDate ? t.toDate() : null; } catch { return null; } };
+const fmt = (d) => d ? d.toLocaleString([], { dateStyle: "medium", timeStyle: "short" }) : "-";
+const ago = (d) => { if (!d) return "-"; const m = (Date.now() - d.getTime()) / 60000; if (m < 60) return Math.round(m) + " min ago"; if (m < 1440) return Math.round(m / 60) + " h ago"; return Math.round(m / 1440) + " d ago"; };
+
+// ---------- login ----------
+$("loginBtn").onclick = async () => {
+  $("lerr").textContent = "";
+  try { await signInWithEmailAndPassword(auth, $("em").value.trim(), $("pw").value); }
+  catch (e) { $("lerr").textContent = e.code || e.message; }
+};
+$("out").onclick = () => signOut(auth);
+
+let started = false;
+onAuthStateChanged(auth, (u) => {
+  $("login").classList.toggle("hide", !!u);
+  $("app").classList.toggle("hide", !u);
+  if (u && !started) { started = true; start(); }
+});
+
+// ---------- tabs ----------
+document.querySelectorAll("nav button").forEach((b) => b.onclick = () => {
+  document.querySelectorAll("nav button").forEach((x) => x.classList.toggle("on", x === b));
+  ["dash", "sup", "dev", "cfg"].forEach((t) => $("t-" + t).classList.toggle("hide", t !== b.dataset.t));
+  if (b.dataset.t === "dash" && map) setTimeout(() => map.invalidateSize(), 100);
+});
+
+let map, markers;
+function start() {
+  initMap(); watchInstalls(); watchTickets(); watchDevices(); loadConfig();
+}
+
+// ---------- dashboard ----------
+function initMap() {
+  map = L.map("map").setView([30.2, 71.5], 5);
+  L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom: 18, attribution: "© OpenStreetMap" }).addTo(map);
+  markers = L.layerGroup().addTo(map);
+}
+
+function table(head, rows) {
+  return "<table><tr>" + head.map((h) => `<th>${h}</th>`).join("") + "</tr>" +
+    rows.map((r) => "<tr>" + r.map((c) => `<td>${c}</td>`).join("") + "</tr>").join("") + "</table>";
+}
+function group(list, key) {
+  const m = {}; list.forEach((x) => { const k = key(x) || "(unknown)"; m[k] = (m[k] || 0) + 1; });
+  return Object.entries(m).sort((a, b) => b[1] - a[1]);
+}
+
+function watchInstalls() {
+  onSnapshot(collection(db, "installs"), (snap) => {
+    const list = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+    const now = Date.now();
+    const act = (days) => list.filter((x) => { const t = dt(x.lastSeen); return t && now - t.getTime() < days * 864e5; }).length;
+    const sessions = list.reduce((a, x) => a + (Number(x.sessions) || 0), 0);
+    $("stats").innerHTML = [
+      ["Total installs", list.length], ["Active 24h", act(1)], ["Active 7d", act(7)], ["Active 30d", act(30)], ["Sessions", sessions]
+    ].map(([k, v]) => `<div class="stat"><b>${v}</b><span>${k}</span></div>`).join("");
+    $("vers").innerHTML = table(["Version", "Users"], group(list, (x) => x.version).map(([k, v]) => [esc(k), v]));
+    $("places").innerHTML = table(["Place", "Users"], group(list, (x) => x.place).slice(0, 25).map(([k, v]) => [esc(k), v]));
+    list.sort((a, b) => (dt(b.lastSeen)?.getTime() || 0) - (dt(a.lastSeen)?.getTime() || 0));
+    $("inst").innerHTML = table(["Place", "Model", "Ver", "Last seen", "Opens"],
+      list.map((x) => [esc(x.place), esc(x.model), esc(x.version), ago(dt(x.lastSeen)), x.sessions || 0]));
+    markers.clearLayers();
+    const pts = [];
+    list.forEach((x) => {
+      if (typeof x.lat === "number" && typeof x.lon === "number") {
+        pts.push([x.lat, x.lon]);
+        L.marker([x.lat, x.lon]).addTo(markers).bindPopup(`<b>${esc(x.place)}</b><br>${esc(x.model)} · v${esc(x.version)}<br>${ago(dt(x.lastSeen))}`);
+      }
+    });
+    if (pts.length) map.fitBounds(pts, { maxZoom: 12, padding: [30, 30] });
+  }, (e) => { $("stats").innerHTML = `<div class="card bad">Cannot read installs: ${esc(e.code)} — check Firestore rules (admin email).</div>`; });
+}
+
+// ---------- support ----------
+let tickets = [], openId = null, unsubMsgs = null;
+function watchTickets() {
+  onSnapshot(query(collection(db, "tickets"), orderBy("lastAt", "desc")), (snap) => {
+    tickets = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+    const un = tickets.filter((t) => (t.unreadAdmin || 0) > 0).length;
+    $("supBadge").textContent = un; $("supBadge").classList.toggle("hide", un === 0);
+    $("tkList").innerHTML = tickets.length ? tickets.map((t) => `
+      <div class="tk ${(t.unreadAdmin || 0) > 0 ? "un" : ""}" data-id="${esc(t.id)}">
+        ${esc(t.contact || t.model || t.id)} <small>${esc(t.lastFrom === "admin" ? "You: " : "")}${esc(t.lastText)}</small>
+        <small>${esc(t.model)} · v${esc(t.appVersion)} · ${ago(dt(t.lastAt))}${(t.unreadAdmin || 0) > 0 ? " · " + t.unreadAdmin + " new" : ""}</small>
+      </div>`).join("") : "<p>No messages yet.</p>";
+    document.querySelectorAll(".tk").forEach((el) => el.onclick = () => openTicket(el.dataset.id));
+  });
+}
+function openTicket(id) {
+  openId = id;
+  const t = tickets.find((x) => x.id === id) || {};
+  $("tkList").classList.add("hide"); $("tkView").classList.remove("hide");
+  $("tkTitle").textContent = t.contact || t.model || id;
+  $("tkInfo").textContent = `Device: ${id} · ${t.model || ""} · Android ${t.android || ""} · App ${t.appVersion || ""}`;
+  updateDoc(doc(db, "tickets", id), { unreadAdmin: 0 }).catch(() => {});
+  if (unsubMsgs) unsubMsgs();
+  unsubMsgs = onSnapshot(query(collection(db, "tickets", id, "messages"), orderBy("at")), (snap) => {
+    $("msgs").innerHTML = snap.docs.map((d) => { const m = d.data(); return `<div class="m ${m.from === "admin" ? "admin" : "user"}">${esc(m.text)}<small>${fmt(dt(m.at))}</small></div>`; }).join("");
+    $("msgs").scrollTop = $("msgs").scrollHeight;
+  });
+}
+$("tkBack").onclick = () => { if (unsubMsgs) unsubMsgs(); openId = null; $("tkView").classList.add("hide"); $("tkList").classList.remove("hide"); };
+$("sendReply").onclick = async () => {
+  const text = $("reply").value.trim(); if (!text || !openId) return;
+  $("sendReply").disabled = true;
+  try {
+    await addDoc(collection(db, "tickets", openId, "messages"), { from: "admin", text, at: serverTimestamp() });
+    await updateDoc(doc(db, "tickets", openId), { lastText: text.slice(0, 200), lastFrom: "admin", lastAt: serverTimestamp(), unreadUser: increment(1), unreadAdmin: 0 });
+    $("reply").value = "";
+  } catch (e) { alert("Failed: " + (e.code || e.message)); }
+  $("sendReply").disabled = false;
+};
+
+// ---------- devices ----------
+let devices = [];
+function watchDevices() {
+  onSnapshot(collection(db, "devices"), (snap) => { devices = snap.docs.map((d) => ({ id: d.id, ...d.data() })); renderDevices(); });
+}
+$("devSearch").oninput = renderDevices;
+function renderDevices() {
+  const q = $("devSearch").value.toLowerCase();
+  const list = devices.filter((d) => !q || (d.id + " " + (d.model || "")).toLowerCase().includes(q))
+    .sort((a, b) => (dt(b.lastSeen)?.getTime() || 0) - (dt(a.lastSeen)?.getTime() || 0));
+  $("devs").innerHTML = "<table><tr><th>Device</th><th>Allowed</th><th>Expiry</th><th></th></tr>" + list.map((d) => {
+    const ex = dt(d.expiry); const exv = ex ? ex.toISOString().slice(0, 10) : "";
+    return `<tr><td><b>${esc(d.id)}</b><br><small>${esc(d.model)} · v${esc(d.appVersion)}<br>${ago(dt(d.lastSeen))} · ${d.sessions || 0} opens</small></td>
+      <td><input type="checkbox" data-a="${esc(d.id)}" ${d.allowed ? "checked" : ""} style="width:auto"></td>
+      <td><input type="date" data-e="${esc(d.id)}" value="${exv}" style="width:140px"></td>
+      <td><button class="btn" data-s="${esc(d.id)}">Save</button></td></tr>`;
+  }).join("") + "</table>";
+  document.querySelectorAll("[data-s]").forEach((b) => b.onclick = async () => {
+    const id = b.dataset.s;
+    const allowed = document.querySelector(`[data-a="${CSS.escape(id)}"]`).checked;
+    const e = document.querySelector(`[data-e="${CSS.escape(id)}"]`).value;
+    const data = { allowed };
+    if (e) data.expiry = new Date(e + "T23:59:59Z"); 
+    try { await setDoc(doc(db, "devices", id), data, { merge: true }); b.textContent = "Saved ✓"; setTimeout(() => b.textContent = "Save", 1500); }
+    catch (er) { alert("Failed: " + (er.code || er.message)); }
+  });
+}
+$("addDev").onclick = async () => {
+  const id = $("newId").value.trim(); if (!id) return;
+  try { await setDoc(doc(db, "devices", id), { allowed: true }, { merge: true }); $("newId").value = ""; }
+  catch (e) { alert("Failed: " + (e.code || e.message)); }
+};
+
+// ---------- app config ----------
+const CFG = [
+  ["minVersion", "string", "Minimum version (forces update)"], ["latestVersion", "string", "Latest version"],
+  ["updateUrl", "string", "Update / download link"], ["updateMessage", "string", "Update message"],
+  ["licenseRequired", "bool", "License required (only approved devices)"], ["trialDays", "number", "Free trial days"],
+  ["whatsapp", "string", "WhatsApp number (digits only)"], ["priceText", "string", "Price text"],
+  ["contactMessage", "string", "WhatsApp first message"], ["certSha1", "string", "Allowed signing SHA-1 (comma separated)"]
+];
+function loadConfig() {
+  onSnapshot(doc(db, "config", "app"), (s) => {
+    const d = s.exists() ? s.data() : {};
+    $("cfgForm").innerHTML = CFG.map(([k, t, label]) => t === "bool"
+      ? `<label><input type="checkbox" id="c_${k}" ${d[k] ? "checked" : ""} style="width:auto"> ${label}</label>`
+      : `<label>${label}</label><input id="c_${k}" type="${t === "number" ? "number" : "text"}" value="${esc(d[k] ?? "")}">`).join("")
+      + `<p><button class="btn y" id="cfgSave">Save settings</button> <span id="cfgMsg"></span></p>`;
+    $("cfgSave").onclick = async () => {
+      const data = {};
+      CFG.forEach(([k, t]) => { const el = $("c_" + k); data[k] = t === "bool" ? el.checked : t === "number" ? Number(el.value || 0) : el.value.trim(); });
+      try { await setDoc(doc(db, "config", "app"), data, { merge: true }); $("cfgMsg").textContent = "Saved ✓"; $("cfgMsg").className = "ok"; }
+      catch (e) { $("cfgMsg").textContent = "Failed: " + (e.code || e.message); $("cfgMsg").className = "bad"; }
+    };
+  });
+}
+</script>
+</body>
+</html>
