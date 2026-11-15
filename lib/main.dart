@@ -1,9 +1,12 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import 'l10n/strings.dart';
 import 'models/app_settings.dart';
 import 'screens/splash_screen.dart';
+import 'services/photo_queue.dart';
 import 'services/photo_store.dart';
 
 Future<void> main() async {
@@ -15,6 +18,7 @@ Future<void> main() async {
   ]);
   await AppSettings.instance.load();
   await PhotoStore.init();
+  unawaited(PhotoQueue.instance.init()); // ادھورے کام مکمل کرنا
   runApp(const GpsCameraApp());
 }
 
