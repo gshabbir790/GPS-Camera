@@ -5,6 +5,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../app_info.dart';
 import '../config/app_config.dart';
 import '../l10n/strings.dart';
+import '../services/net.dart';
 import '../services/remote_guard.dart';
 import '../widgets/exit_guard.dart';
 import 'camera_screen.dart';
@@ -44,11 +45,15 @@ class _GuardScreenState extends State<GuardScreen> {
   Future<void> _run() async {
     if (mounted) setState(() => _phase = _Phase.checking);
     try {
-      final cfg = await RemoteGuard.fetchConfig();
-      if (cfg != null) _cfg = cfg;
+      _sha = await RemoteGuard.signatureSha1();
+      final online = await hasInternet();
+      RemoteConfig? cfg;
+      if (online) {
+        cfg = await RemoteGuard.fetchConfig();
+        if (cfg != null) _cfg = cfg;
+      }
 
       // 1) غیر سرکاری / بدلی ہوئی APK (اجازت شدہ SHA-1 Firebase کے certSha1 فیلڈ سے بھی بدلا جا سکتا ہے)
-      _sha = await RemoteGuard.signatureSha1();
       final allowedList = (cfg != null && cfg.certSha1.trim().isNotEmpty
               ? cfg.certSha1
               : AppConfig.expectedCertSha1)
@@ -61,12 +66,22 @@ class _GuardScreenState extends State<GuardScreen> {
         return;
       }
 
-      // 2) لازمی اپڈیٹ
+      // 2) لازمی اپڈیٹ (صرف آن لائن ہونے پر جانچا جاتا ہے)
       if (cfg != null) {
         if (cfg.minVersion.isNotEmpty && RemoteGuard.isOlder(kAppVersion, cfg.minVersion)) {
           _set(_Phase.update);
           return;
         }
+      }
+
+      // آف لائن: کیمرہ چلنے دیں؛ لائسنس لازمی ہو تو آخری کامیاب جانچ کی مہلت (grace) دیکھیں
+      if (!online) {
+        if (!(await RemoteGuard.cachedRequired()) || await RemoteGuard.withinGrace()) {
+          _go();
+        } else {
+          _set(_Phase.unverified);
+        }
+        return;
       }
 
       // 3) ڈیوائس لائسنس

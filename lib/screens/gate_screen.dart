@@ -68,7 +68,7 @@ class _GateScreenState extends State<GateScreen> with WidgetsBindingObserver {
         _foreverDenied = p == LocationPermission.deniedForever;
         _checked = true;
       });
-      if (gps && perm && net) {
+      if (gps && perm) {
         _done = true;
         _timer?.cancel();
         if (!mounted) return;
@@ -99,8 +99,11 @@ class _GateScreenState extends State<GateScreen> with WidgetsBindingObserver {
     required String hint,
     String? action,
     VoidCallback? onAction,
+    bool optional = false,
   }) {
-    final color = !_checked ? Colors.white38 : (ok ? Colors.greenAccent : Colors.redAccent);
+    final color = !_checked
+        ? Colors.white38
+        : (ok ? Colors.greenAccent : (optional ? Colors.orangeAccent : Colors.redAccent));
     return Container(
       margin: const EdgeInsets.symmetric(vertical: 6),
       padding: const EdgeInsets.all(14),
@@ -130,7 +133,8 @@ class _GateScreenState extends State<GateScreen> with WidgetsBindingObserver {
           const SizedBox(
               width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
         else
-          const Icon(Icons.cancel, color: Colors.redAccent),
+          Icon(optional ? Icons.info_outline : Icons.cancel,
+              color: optional ? Colors.orangeAccent : Colors.redAccent),
       ]),
     );
   }
@@ -160,8 +164,8 @@ class _GateScreenState extends State<GateScreen> with WidgetsBindingObserver {
                           color: Colors.white, fontSize: 26, fontWeight: FontWeight.bold)),
                   const SizedBox(height: 6),
                   Text(
-                    S.t('GPS Camera needs these to work. The app opens automatically when all are ready.',
-                        'GPS Camera کے لیے یہ تینوں ضروری ہیں۔ سب ٹھیک ہوتے ہی ایپ خود کھل جائے گی۔'),
+                    S.t('GPS Camera needs location (GPS) to work. The app opens automatically when ready.',
+                        'GPS Camera کے لیے لوکیشن (GPS) ضروری ہے۔ ٹھیک ہوتے ہی ایپ خود کھل جائے گی۔'),
                     textAlign: TextAlign.center,
                     style: const TextStyle(color: Colors.white70, fontSize: 13),
                   ),
@@ -194,8 +198,10 @@ class _GateScreenState extends State<GateScreen> with WidgetsBindingObserver {
                   _tile(
                     ok: _net,
                     icon: Icons.wifi,
-                    title: S.t('Internet (Wi-Fi or mobile data)', 'انٹرنیٹ (Wi-Fi یا موبائل ڈیٹا)'),
-                    hint: S.t('Turn on Wi-Fi or mobile data', 'Wi-Fi یا موبائل ڈیٹا آن کریں'),
+                    title: S.t('Internet (optional)', 'انٹرنیٹ (اختیاری)'),
+                    hint: S.t('Offline works. Internet is only needed for map, address and updates.',
+                        'انٹرنیٹ کے بغیر بھی چلتی ہے۔ نقشے، پتے اور اپڈیٹ کے لیے درکار ہے۔'),
+                    optional: true,
                   ),
                   const SizedBox(height: 16),
                   OutlinedButton.icon(
