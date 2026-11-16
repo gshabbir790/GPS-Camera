@@ -1,5 +1,8 @@
 # Admin panel + Support chat — setup
 
+## 0) Firestore database banayein (SAB SE PEHLE — iske baghair "404" aata hai)
+Firebase Console → **Build → Firestore Database → Create database** → Edition: Standard → Database ID: `(default)` → Location (koi bhi, jaise `asia-south1`) → **Production mode** → Create.
+
 ## 1) Admin user banayein (Firebase Console)
 1. **Build → Authentication → Get started → Sign-in method → Email/Password → Enable**.
 2. **Users → Add user** → apna email + password.
