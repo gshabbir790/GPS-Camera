@@ -95,25 +95,65 @@ class StampWidget extends StatelessWidget {
       );
 
   // ---------- مشترک حصے ----------
-  Widget _titleRow(double size) => Text.rich(
-        TextSpan(children: [
-          TextSpan(
-              text: d.title.isEmpty ? 'Location' : d.title,
-              style: TextStyle(fontSize: size, fontWeight: FontWeight.w500)),
-          if (d.flag.isNotEmpty) TextSpan(text: ' ${d.flag}', style: TextStyle(fontSize: size)),
-        ]),
-      );
+  /// متن کا بلاک جس کی اونچائی ہمیشہ مقررہ رہتی ہے: پتہ لمبا ہو تو فونٹ خود چھوٹا ہو جاتا ہے
+  Widget _fitted({
+    required double height,
+    double titleSize = 16,
+    double bodySize = 10,
+    bool dateLine = true,
+    List<String> extra = const [],
+  }) {
+    return SizedBox(
+      height: height,
+      child: LayoutBuilder(builder: (context, c) {
+        final w = c.maxWidth.isFinite ? c.maxWidth : 240.0;
+        final lines = <_StampLine>[
+          _StampLine(
+              '${d.title.isEmpty ? 'Location' : d.title}${d.flag.isNotEmpty ? ' ${d.flag}' : ''}',
+              titleSize,
+              FontWeight.w500),
+          if (d.address.isNotEmpty) _StampLine(d.address, bodySize, FontWeight.normal),
+          if (d.latLon.isNotEmpty) _StampLine(d.latLon, bodySize, FontWeight.normal),
+          if (dateLine) _StampLine(d.dateLine, bodySize, FontWeight.normal),
+          if (d.note.isNotEmpty) _StampLine('Note : ${d.note}', bodySize, FontWeight.normal),
+          for (final e in extra) _StampLine(e, bodySize, FontWeight.normal),
+        ];
+        double measure(double scale) {
+          var h = 0.0;
+          for (final l in lines) {
+            final tp = TextPainter(
+              text: TextSpan(
+                text: l.text,
+                style: TextStyle(fontSize: l.size * scale, fontWeight: l.weight, height: 1.25),
+              ),
+              textDirection: TextDirection.ltr,
+            )..layout(maxWidth: w);
+            h += tp.height;
+          }
+          return h;
+        }
 
-  Widget _lines({double size = 11}) => Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          if (d.address.isNotEmpty) Text(d.address, style: TextStyle(fontSize: size)),
-          Text(d.latLon, style: TextStyle(fontSize: size)),
-          Text(d.dateLine, style: TextStyle(fontSize: size)),
-          if (d.note.isNotEmpty) Text('Note : ${d.note}', style: TextStyle(fontSize: size)),
-        ],
-      );
+        var scale = 1.0;
+        while (scale > 0.45 && measure(scale) > height) {
+          scale -= 0.03;
+        }
+        return ClipRect(
+          child: Align(
+            alignment: Alignment.topLeft,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                for (final l in lines)
+                  Text(l.text,
+                      style: TextStyle(fontSize: l.size * scale, fontWeight: l.weight)),
+              ],
+            ),
+          ),
+        );
+      }),
+    );
+  }
 
   Widget _map(double size, {bool stretch = false}) {
     if (!showMap) return const SizedBox.shrink();
@@ -148,20 +188,15 @@ class StampWidget extends StatelessWidget {
       );
 
   // ---------- 1) ایڈوانس ----------
-  // نقشہ متن والے خانے کے برابر اونچا (خود پھیل جاتا ہے)
-  Widget _advance() => IntrinsicHeight(
+  // اسٹیمپ کی اونچائی مقررہ ہے؛ پتہ لمبا ہو تو متن چھوٹا ہو جاتا ہے، اسٹیمپ بڑا نہیں ہوتا
+  Widget _advance() => SizedBox(
+        height: 112,
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            _map(92, stretch: true),
+            _map(112, stretch: true),
             Expanded(
-              child: _box(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [_titleRow(18), const SizedBox(height: 2), _lines(size: 10.5)],
-                ),
-              ),
+              child: _box(child: _fitted(height: 96, titleSize: 17, bodySize: 10.5)),
             ),
           ],
         ),
@@ -189,10 +224,7 @@ class StampWidget extends StatelessWidget {
               ]),
             ]),
             const SizedBox(height: 4),
-            _titleRow(16),
-            if (d.address.isNotEmpty) Text(d.address, style: const TextStyle(fontSize: 11)),
-            Text(d.latLon, style: const TextStyle(fontSize: 11)),
-            if (d.note.isNotEmpty) Text('Note : ${d.note}', style: const TextStyle(fontSize: 11)),
+            _fitted(height: 70, titleSize: 15, bodySize: 10.5, dateLine: false),
           ],
         ),
       );
@@ -214,13 +246,7 @@ class StampWidget extends StatelessWidget {
             if (showMap) _map(88) else const SizedBox(width: 88),
           ]),
           const SizedBox(width: 2),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [_titleRow(18), const SizedBox(height: 2), _lines(size: 10.5)],
-            ),
-          ),
+          Expanded(child: _fitted(height: 111, titleSize: 16, bodySize: 10)),
         ]),
       );
 
@@ -246,11 +272,12 @@ class StampWidget extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisSize: MainAxisSize.min,
               children: [
-                _titleRow(16),
-                const SizedBox(height: 2),
-                _lines(size: 10),
-                Text('Azimuth/Bearing : ${d.heading.toStringAsFixed(2)}°',
-                    style: const TextStyle(fontSize: 10)),
+                _fitted(
+                  height: 84,
+                  titleSize: 15,
+                  bodySize: 9.5,
+                  extra: ['Azimuth/Bearing : ${d.heading.toStringAsFixed(2)}°'],
+                ),
                 const SizedBox(height: 3),
                 Row(children: [
                   const Icon(Icons.terrain, size: 14, color: Colors.white70),
@@ -273,13 +300,7 @@ class StampWidget extends StatelessWidget {
         pad: const EdgeInsets.all(5),
         child: Row(crossAxisAlignment: CrossAxisAlignment.center, children: [
           if (showMap) _map(78),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [_titleRow(15), const SizedBox(height: 2), _lines(size: 9.5)],
-            ),
-          ),
+          Expanded(child: _fitted(height: 78, titleSize: 14, bodySize: 9)),
           const SizedBox(width: 6),
           Container(
             color: Colors.white,
@@ -359,4 +380,11 @@ class _DialPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant _DialPainter old) => old.heading != heading;
+}
+
+class _StampLine {
+  final String text;
+  final double size;
+  final FontWeight weight;
+  const _StampLine(this.text, this.size, this.weight);
 }
