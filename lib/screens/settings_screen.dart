@@ -1,12 +1,9 @@
 import 'package:flutter/material.dart';
 import '../app_info.dart';
-import '../config/app_config.dart';
 import '../l10n/strings.dart';
 
 import '../models/app_settings.dart';
 import '../models/stamp_data.dart';
-import 'package:url_launcher/url_launcher.dart';
-
 import '../widgets/ad_banner.dart';
 import '../widgets/credit_banner.dart';
 import '../widgets/map_type_sheet.dart';
@@ -199,15 +196,6 @@ class SettingsScreen extends StatelessWidget {
               onTap: () => Navigator.push(
                   context, MaterialPageRoute(builder: (_) => const ReportSettingsScreen())),
             ),
-            if (AppConfig.statsReady)
-              SwitchListTile(
-                secondary: const Icon(Icons.insights),
-                title: Text(S.t('Share anonymous usage info', 'گمنام استعمال کی معلومات شیئر کریں')),
-                subtitle: Text(S.t('App version, phone model, approximate area (~1 km)',
-                    'ایپ ورژن، فون ماڈل، تقریبی علاقہ (~1 کلومیٹر)')),
-                value: s.statsConsent == 1,
-                onChanged: (v) => s.update(() => s.statsConsent = v ? 1 : 0),
-              ),
             _header(S.t('Storage and share', 'سٹوریج اور شیئر')),
             SwitchListTile(
               secondary: const Icon(Icons.photo_library),
@@ -252,13 +240,6 @@ class SettingsScreen extends StatelessWidget {
                   SupportService.refreshUnread();
                 },
               ),
-            ),
-            ListTile(
-              leading: const Icon(Icons.privacy_tip),
-              title: Text(S.t('Privacy Policy', 'پرائیویسی پالیسی')),
-              subtitle: Text('Install ID: ${s.installId}', style: const TextStyle(fontSize: 11)),
-              trailing: const Icon(Icons.open_in_new),
-              onTap: () => launchUrl(Uri.parse(kPrivacyUrl), mode: LaunchMode.externalApplication),
             ),
             const SizedBox(height: 20),
             const CreditBanner(),
