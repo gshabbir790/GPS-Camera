@@ -8,6 +8,13 @@ class FsResponse {
   final Map<String, dynamic>? json;
   final DateTime? serverDate; // Google سرور کا وقت (فون کی گھڑی بدلنے سے نہیں بدلتا)
   const FsResponse(this.code, this.json, this.serverDate);
+
+  /// سرور کا خرابی پیغام (اگر ہو)
+  String get message {
+    final e = json?['error'];
+    if (e is Map) return (e['message'] ?? '').toString();
+    return '';
+  }
 }
 
 /// Firestore REST: پہلے Web key، ناکام ہو تو Android key (package + SHA-1 کے ساتھ)

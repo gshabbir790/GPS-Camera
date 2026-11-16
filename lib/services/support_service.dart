@@ -71,7 +71,15 @@ class SupportService {
         'at': {'timestampValue': DateTime.now().toUtc().toIso8601String()},
       },
     });
-    if (a.code != 200) return 'Server error (${a.code})';
+    if (a.code != 200) {
+      final m = a.message.toLowerCase();
+      if (a.code == 404 && m.contains('database')) {
+        return 'Firestore database is not created yet (developer setup)';
+      }
+      if (a.code == 403) return 'Permission denied (Firestore rules not published)';
+      if (a.code == 0) return 'No connection';
+      return 'Server error (${a.code})';
+    }
 
     final c = contact.trim();
     final fields = <String, dynamic>{
@@ -124,21 +132,27 @@ class SupportService {
   static Future<void> saveContact(String v) async =>
       (await SharedPreferences.getInstance()).setString('support_contact', v.trim());
 
-  /// سرور سے رابطے کی جانچ: (code, پیغام)
+  /// سرور سے رابطے کی جانچ
   static Future<String> test() async {
     final r = await fsRequest('GET', '/config/app');
+    final m = r.message.toLowerCase();
     switch (r.code) {
       case 200:
+        return 'OK (200) - connected';
       case 404:
-        return 'OK (${r.code})';
+        if (m.contains('database')) {
+          return 'Firestore database is NOT created. Firebase Console → Build → Firestore Database → Create database.';
+        }
+        return 'OK (404) - connected (config/app not created yet)';
       case 0:
         return 'No connection (internet?)';
       case 403:
       case 401:
+        return 'Rejected (${r.code}) - Firestore rules not published or API key problem.\n${r.message}';
       case 400:
-        return 'Rejected (${r.code}) - Firestore rules or API key';
+        return 'Bad request (400) - ${r.message}';
       default:
-        return 'Error (${r.code})';
+        return 'Error (${r.code}) ${r.message}';
     }
   }
 }
