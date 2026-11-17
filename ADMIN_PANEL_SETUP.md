@@ -83,3 +83,13 @@ Tabs:
 - Console → Firestore mein `installs` collection hai? Nahi to app ke Support screen ke upar "network" icon (Connection test) dabayein:
   `OK` = theek, `Rejected (403)` = rules/key ka masla, `No connection` = internet.
 - Login ke baad "Cannot read installs: permission-denied" aaye to rules mein admin email theek likhein.
+
+## 5) Licensing kaise chalayein (kisi ko app share karne se pehle)
+- Jab tak Settings tab mein **License required** tick nahi hota, app **har phone par bina approval** chalti hai (aur Devices list khali rehti hai).
+- Apne phone ki Device ID: app mein Settings → neeche **Device ID** (tap kar ke copy). Pehle usay Devices tab mein "Approve a device by ID" se allow karein.
+- Phir Settings tab mein **License required** tick kar ke Save karein. Ab naye phone par "This device is not activated" aayegi (Device ID + WhatsApp button); wo ID bhejega, aap Devices tab mein Allowed tick kar ke Save karein.
+- Trial dena ho to **Free trial days** likhein.
+
+## 6) Messages delete karna
+- User app: kisi message ko dair tak dabayein → "Delete for me" (sirf us phone se). Chat screen ke upar jhadu icon se poori chat us phone se saaf.
+- Admin panel: message ke saath ⋯ → "Delete for me" ya (sirf apne bheje hue ke liye) "Delete for everyone (unsend)": user ke phone par "This message was deleted" likha aata hai.
