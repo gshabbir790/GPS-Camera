@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import '../app_info.dart';
 import '../l10n/strings.dart';
 
@@ -7,6 +8,7 @@ import '../models/stamp_data.dart';
 import '../widgets/ad_banner.dart';
 import '../widgets/credit_banner.dart';
 import '../widgets/map_type_sheet.dart';
+import '../services/remote_guard.dart';
 import '../services/support_service.dart';
 import 'report_settings_screen.dart';
 import 'support_screen.dart';
@@ -240,6 +242,25 @@ class SettingsScreen extends StatelessWidget {
                   SupportService.refreshUnread();
                 },
               ),
+            ),
+            FutureBuilder<Map<String, String>>(
+              future: RemoteGuard.deviceInfo(),
+              builder: (context, snap) {
+                final id = snap.data?['id'] ?? '';
+                return ListTile(
+                  leading: const Icon(Icons.fingerprint),
+                  title: Text(S.t('Device ID', 'ڈیوائس ID')),
+                  subtitle: Text(id.isEmpty ? '...' : id, style: const TextStyle(fontSize: 12)),
+                  trailing: const Icon(Icons.copy, size: 18),
+                  onTap: id.isEmpty
+                      ? null
+                      : () {
+                          Clipboard.setData(ClipboardData(text: id));
+                          ScaffoldMessenger.of(context)
+                              .showSnackBar(SnackBar(content: Text(S.t('Copied', 'کاپی ہو گیا'))));
+                        },
+                );
+              },
             ),
             const SizedBox(height: 20),
             const CreditBanner(),

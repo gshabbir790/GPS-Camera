@@ -19,12 +19,16 @@ class _SupportScreenState extends State<SupportScreen> {
   final _contact = TextEditingController();
   final _scroll = ScrollController();
   List<SupportMsg> _msgs = [];
+  Set<String> _hidden = {};
   bool _loading = true, _failed = false, _sending = false;
   Timer? _timer;
 
   @override
   void initState() {
     super.initState();
+    SupportService.hiddenIds().then((h) {
+      if (mounted) setState(() => _hidden = h);
+    });
     SupportService.getContact().then((v) {
       if (mounted) _contact.text = v;
     });
@@ -79,6 +83,54 @@ class _SupportScreenState extends State<SupportScreen> {
     }
   }
 
+  Future<void> _deleteForMe(SupportMsg m) async {
+    await SupportService.hide([m.id]);
+    if (mounted) setState(() => _hidden = {..._hidden, m.id});
+  }
+
+  Future<void> _msgMenu(SupportMsg m) async {
+    final del = await showModalBottomSheet<bool>(
+      context: context,
+      builder: (ctx) => SafeArea(
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          ListTile(
+            leading: const Icon(Icons.delete_outline, color: Colors.red),
+            title: Text(S.t('Delete for me', 'میرے لیے حذف کریں')),
+            subtitle: Text(S.t('Only removed from this phone', 'صرف اس فون سے ہٹے گا')),
+            onTap: () => Navigator.pop(ctx, true),
+          ),
+          ListTile(
+            leading: const Icon(Icons.close),
+            title: Text(S.t('Cancel', 'منسوخ')),
+            onTap: () => Navigator.pop(ctx, false),
+          ),
+        ]),
+      ),
+    );
+    if (del == true) await _deleteForMe(m);
+  }
+
+  Future<void> _clearAll() async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(S.t('Clear chat?', 'چیٹ صاف کریں؟')),
+        content: Text(S.t('All messages will be removed from this phone only. The developer still has their copy.',
+            'تمام پیغامات صرف اس فون سے ہٹیں گے۔ ڈویلپر کے پاس ان کی کاپی رہے گی۔')),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(S.t('No', 'نہیں'))),
+          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: Text(S.t('Clear', 'صاف کریں'))),
+        ],
+      ),
+    );
+    if (ok == true) {
+      await SupportService.hide(_msgs.map((e) => e.id));
+      if (mounted) setState(() => _hidden = {..._hidden, ..._msgs.map((e) => e.id)});
+    }
+  }
+
+  List<SupportMsg> get _visible => _msgs.where((m) => !_hidden.contains(m.id)).toList();
+
   Future<void> _test() async {
     final r = await SupportService.test();
     if (!mounted) return;
@@ -104,6 +156,10 @@ class _SupportScreenState extends State<SupportScreen> {
       appBar: AppBar(
         title: Text(S.t('Contact developer', 'ڈویلپر سے رابطہ')),
         actions: [
+          IconButton(
+              tooltip: S.t('Clear chat', 'چیٹ صاف کریں'),
+              icon: const Icon(Icons.delete_sweep),
+              onPressed: _clearAll),
           IconButton(
               tooltip: S.t('Connection test', 'رابطے کی جانچ'),
               icon: const Icon(Icons.network_check),
@@ -138,11 +194,13 @@ class _SupportScreenState extends State<SupportScreen> {
                   : ListView.builder(
                       controller: _scroll,
                       padding: const EdgeInsets.all(12),
-                      itemCount: _msgs.length,
+                      itemCount: _visible.length,
                       itemBuilder: (context, i) {
-                        final m = _msgs[i];
+                        final m = _visible[i];
                         final mine = m.from == 'user';
-                        return Align(
+                        return GestureDetector(
+                          onLongPress: () => _msgMenu(m),
+                          child: Align(
                           alignment: mine ? Alignment.centerRight : Alignment.centerLeft,
                           child: Container(
                             margin: const EdgeInsets.symmetric(vertical: 4),
@@ -160,14 +218,21 @@ class _SupportScreenState extends State<SupportScreen> {
                                   Text(S.t('Developer', 'ڈویلپر'),
                                       style: const TextStyle(
                                           fontSize: 11, fontWeight: FontWeight.bold)),
-                                SelectableText(m.text),
+                                if (m.deleted)
+                                  Text(
+                                    S.t('🚫 This message was deleted', '🚫 یہ پیغام حذف کر دیا گیا'),
+                                    style: const TextStyle(
+                                        fontStyle: FontStyle.italic, color: Colors.black54),
+                                  )
+                                else
+                                  Text(m.text),
                                 const SizedBox(height: 2),
                                 Text(_time(m.at),
                                     style: const TextStyle(fontSize: 10, color: Colors.black54)),
                               ],
                             ),
                           ),
-                        );
+                        ));
                       },
                     ),
         ),

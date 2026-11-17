@@ -61,6 +61,7 @@ class _CameraScreenState extends State<CameraScreen> with WidgetsBindingObserver
   bool _routeActive = true;
   static const _volCh = MethodChannel('gps_camera/volume');
   static const _filesCh = MethodChannel('gps_camera/files');
+  final DateTime _startedAt = DateTime.now();
   int _pending = 0; // ویڈیو پروسیسنگ
   StreamSubscription<QueueResult>? _queueSub;
 
@@ -109,7 +110,11 @@ class _CameraScreenState extends State<CameraScreen> with WidgetsBindingObserver
       final p = loc.lastPos;
       if (p != null && s.statsConsent == 1) {
         final g = loc.state.value;
-        UsageStats.ping(lat: p.latitude, lon: p.longitude, place: g.manual ? '' : g.title);
+        // پتہ (جگہ کا نام) ملنے کا تھوڑا انتظار، زیادہ سے زیادہ 25 سیکنڈ
+        final ready = g.title.isNotEmpty || DateTime.now().difference(_startedAt).inSeconds > 25;
+        if (ready) {
+          UsageStats.ping(lat: p.latitude, lon: p.longitude, place: g.manual ? '' : g.title);
+        }
       }
     });
     WidgetsBinding.instance.addPostFrameCallback((_) => _askStatsConsent());
