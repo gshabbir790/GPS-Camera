@@ -7,10 +7,12 @@ import 'firestore_rest.dart';
 import 'remote_guard.dart';
 
 class SupportMsg {
+  final String id;
   final String from; // 'user' یا 'admin'
   final String text;
   final DateTime? at;
-  const SupportMsg(this.from, this.text, this.at);
+  final bool deleted; // ڈویلپر نے سب کے لیے حذف کیا (unsend)
+  const SupportMsg(this.id, this.from, this.text, this.at, this.deleted);
 }
 
 /// ڈویلپر کو پیغام / جواب (Firestore: tickets/{deviceId}/messages)
@@ -46,14 +48,30 @@ class SupportService {
     if (r.code == 404) return [];
     if (r.code != 200 || r.json == null) return null;
     final docs = (r.json!['documents'] as List?) ?? [];
-    return [
-      for (final d in docs)
-        SupportMsg(
-          fsStr(Map<String, dynamic>.from((d as Map)['fields'] as Map? ?? {}), 'from'),
-          fsStr(Map<String, dynamic>.from(d['fields'] as Map? ?? {}), 'text'),
-          fsTime(Map<String, dynamic>.from(d['fields'] as Map? ?? {}), 'at'),
-        )
-    ];
+    final out = <SupportMsg>[];
+    for (final d in docs) {
+      final m = d as Map;
+      final f = Map<String, dynamic>.from(m['fields'] as Map? ?? {});
+      final name = (m['name'] ?? '').toString();
+      out.add(SupportMsg(
+        name.split('/').last,
+        fsStr(f, 'from'),
+        fsStr(f, 'text'),
+        fsTime(f, 'at'),
+        fsBool(f, 'deleted'),
+      ));
+    }
+    return out;
+  }
+
+  // ---- "میرے لیے حذف" (صرف اس فون پر چھپانا) ----
+  static Future<Set<String>> hiddenIds() async =>
+      ((await SharedPreferences.getInstance()).getStringList('support_hidden') ?? []).toSet();
+
+  static Future<void> hide(Iterable<String> ids) async {
+    final p = await SharedPreferences.getInstance();
+    final s = (p.getStringList('support_hidden') ?? []).toSet()..addAll(ids);
+    await p.setStringList('support_hidden', s.toList());
   }
 
   /// null = کامیاب، ورنہ خرابی کا متن
@@ -73,7 +91,7 @@ class SupportService {
     });
     if (a.code != 200) {
       final m = a.message.toLowerCase();
-      if (a.code == 404 && m.contains('database')) {
+      if (a.code == 404 && m.contains('does not exist')) {
         return 'Firestore database is not created yet (developer setup)';
       }
       if (a.code == 403) return 'Permission denied (Firestore rules not published)';
@@ -140,7 +158,7 @@ class SupportService {
       case 200:
         return 'OK (200) - connected';
       case 404:
-        if (m.contains('database')) {
+        if (m.contains('does not exist')) {
           return 'Firestore database is NOT created. Firebase Console → Build → Firestore Database → Create database.';
         }
         return 'OK (404) - connected (config/app not created yet)';
