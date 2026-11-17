@@ -44,6 +44,10 @@
   .m small{display:block;font-size:10px;color:#555;margin-top:2px}
   #login{max-width:360px;margin:12vh auto;padding:20px}
   .hide{display:none!important}
+  #menu{position:fixed;inset:0;background:#0007;z-index:50;display:flex;align-items:center;justify-content:center}
+  #menu .sheet{background:#fff;border-radius:14px;padding:14px;width:min(320px,90vw);display:flex;flex-direction:column;gap:8px}
+  .mopt{text-decoration:none;font-weight:700;padding:0 4px}
+  .del{color:#777;font-style:italic}
   label{font-size:12px;color:#555;display:block;margin:8px 0 2px}
   .ok{color:#2e7d32}.bad{color:#c62828}
 </style>
@@ -57,6 +61,8 @@
   <p><button class="btn" id="loginBtn" style="width:100%">Login</button></p>
   <p id="lerr" class="bad"></p>
 </div>
+
+<div id="menu" class="hide"></div>
 
 <div id="app" class="hide">
   <header><h1>GPS Camera – Admin</h1><button id="out">Logout</button></header>
@@ -78,7 +84,7 @@
     <section id="t-sup" class="hide">
       <div id="tkList" class="card"></div>
       <div id="tkView" class="card hide">
-        <div class="row"><button class="btn" id="tkBack">← Back</button><b id="tkTitle"></b></div>
+        <div class="row"><button class="btn" id="tkBack">← Back</button><b id="tkTitle" style="flex:1"></b><button class="btn r" id="tkClear">Clear chat</button></div>
         <div id="tkInfo" style="font-size:12px;color:#555;margin:6px 0"></div>
         <div class="msgs" id="msgs"></div>
         <div class="row" style="margin-top:8px">
@@ -91,6 +97,7 @@
     <section id="t-dev" class="hide">
       <div class="card">
         <b>Approve a device by ID</b>
+        <div style="font-size:12px;color:#666;margin:4px 0">Licensing is OFF until you tick "License required" in the Settings tab. When ON, new phones appear here as "not allowed" with their Device ID — tick Allowed and Save.</div>
         <div class="row" style="margin-top:6px"><input id="newId" placeholder="Device ID"><button class="btn y" id="addDev">Allow</button></div>
       </div>
       <div class="card"><input id="devSearch" placeholder="Search ID / model"><div class="scroll" id="devs" style="margin-top:8px"></div></div>
@@ -106,7 +113,7 @@
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/13.2.0/firebase-app.js";
 import { getAuth, signInWithEmailAndPassword, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/13.2.0/firebase-auth.js";
-import { getFirestore, collection, doc, onSnapshot, query, orderBy, addDoc, setDoc, updateDoc, serverTimestamp, increment } from "https://www.gstatic.com/firebasejs/13.2.0/firebase-firestore.js";
+import { getFirestore, collection, doc, onSnapshot, query, orderBy, addDoc, setDoc, updateDoc, serverTimestamp, increment, getDocs, writeBatch } from "https://www.gstatic.com/firebasejs/13.2.0/firebase-firestore.js";
 
 // ===== Firebase web config (Project settings → Your apps → Web app) =====
 const firebaseConfig = {
@@ -156,10 +163,16 @@ function start() {
 
 // ---------- dashboard ----------
 function initMap() {
-  map = L.map("map").setView([30.2, 71.5], 5);
-  L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom: 18, attribution: "© OpenStreetMap" }).addTo(map);
+  map = L.map("map");
+  const road = L.tileLayer("https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png", { maxZoom: 19, subdomains: "abcd", attribution: "© OpenStreetMap © CARTO" });
+  const sat = L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}", { maxZoom: 19, attribution: "Esri" });
+  const osm = L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom: 19, attribution: "© OpenStreetMap" });
+  road.addTo(map);
+  L.control.layers({ "Map": road, "Satellite": sat, "OpenStreetMap": osm }, null, { position: "topright" }).addTo(map);
+  map.setView([30.2, 71.5], 5);
   markers = L.layerGroup().addTo(map);
 }
+const gmaps = (lat, lon) => `https://www.google.com/maps/search/?api=1&query=${lat},${lon}`;
 
 function table(head, rows) {
   return "<table><tr>" + head.map((h) => `<th>${h}</th>`).join("") + "</tr>" +
@@ -182,17 +195,18 @@ function watchInstalls() {
     $("vers").innerHTML = table(["Version", "Users"], group(list, (x) => x.version).map(([k, v]) => [esc(k), v]));
     $("places").innerHTML = table(["Place", "Users"], group(list, (x) => x.place).slice(0, 25).map(([k, v]) => [esc(k), v]));
     list.sort((a, b) => (dt(b.lastSeen)?.getTime() || 0) - (dt(a.lastSeen)?.getTime() || 0));
-    $("inst").innerHTML = table(["Place", "Model", "Ver", "Last seen", "Opens"],
-      list.map((x) => [esc(x.place), esc(x.model), esc(x.version), ago(dt(x.lastSeen)), x.sessions || 0]));
+    $("inst").innerHTML = table(["Place", "Model", "Ver", "Last seen", "Opens", "Map"],
+      list.map((x) => [esc(x.place || "(unknown)"), esc(x.model), esc(x.version), ago(dt(x.lastSeen)), x.sessions || 0,
+        (typeof x.lat === "number" ? `<a target="_blank" href="${gmaps(x.lat, x.lon)}">Google Maps</a>` : "-")]));
     markers.clearLayers();
     const pts = [];
     list.forEach((x) => {
       if (typeof x.lat === "number" && typeof x.lon === "number") {
         pts.push([x.lat, x.lon]);
-        L.marker([x.lat, x.lon]).addTo(markers).bindPopup(`<b>${esc(x.place)}</b><br>${esc(x.model)} · v${esc(x.version)}<br>${ago(dt(x.lastSeen))}`);
+        L.marker([x.lat, x.lon]).addTo(markers).bindPopup(`<b>${esc(x.place || "(unknown)")}</b><br>${esc(x.model)} · v${esc(x.version)}<br>${ago(dt(x.lastSeen))}<br><a target="_blank" href="${gmaps(x.lat, x.lon)}">Open in Google Maps</a>`);
       }
     });
-    if (pts.length) map.fitBounds(pts, { maxZoom: 12, padding: [30, 30] });
+    if (pts.length && !window.__fitted) { map.fitBounds(pts, { maxZoom: 14, padding: [30, 30] }); window.__fitted = true; }
   }, (e) => { $("stats").innerHTML = `<div class="card bad">Cannot read installs: ${esc(e.code)} — check Firestore rules (admin email).</div>`; });
 }
 
@@ -220,7 +234,12 @@ function openTicket(id) {
   updateDoc(doc(db, "tickets", id), { unreadAdmin: 0 }).catch(() => {});
   if (unsubMsgs) unsubMsgs();
   unsubMsgs = onSnapshot(query(collection(db, "tickets", id, "messages"), orderBy("at")), (snap) => {
-    $("msgs").innerHTML = snap.docs.map((d) => { const m = d.data(); return `<div class="m ${m.from === "admin" ? "admin" : "user"}">${esc(m.text)}<small>${fmt(dt(m.at))}</small></div>`; }).join("");
+    $("msgs").innerHTML = snap.docs.filter((d) => !d.data().hiddenAdmin).map((d) => {
+      const m = d.data();
+      const body = m.deleted ? `<span class="del">🚫 This message was deleted</span>` : esc(m.text);
+      return `<div class="m ${m.from === "admin" ? "admin" : "user"}">${body}<small>${fmt(dt(m.at))} · <a href="#" class="mopt" data-mid="${esc(d.id)}" data-from="${esc(m.from)}" data-del="${m.deleted ? 1 : 0}">⋯</a></small></div>`;
+    }).join("");
+    document.querySelectorAll(".mopt").forEach((a) => a.onclick = (ev) => { ev.preventDefault(); msgMenu(a.dataset.mid, a.dataset.from, a.dataset.del === "1"); });
     $("msgs").scrollTop = $("msgs").scrollHeight;
   });
 }
@@ -234,6 +253,38 @@ $("sendReply").onclick = async () => {
     $("reply").value = "";
   } catch (e) { alert("Failed: " + (e.code || e.message)); }
   $("sendReply").disabled = false;
+};
+
+function askMenu(opts) {
+  return new Promise((res) => {
+    const el = $("menu");
+    el.innerHTML = '<div class="sheet">' + opts.map((o) => `<button class="btn ${o.cls || ""}" data-k="${o.k}">${o.label}</button>`).join("") + '<button class="btn" data-k="">Cancel</button></div>';
+    el.classList.remove("hide");
+    el.onclick = (e) => {
+      const k = e.target && e.target.dataset ? e.target.dataset.k : undefined;
+      if (k === undefined && e.target !== el) return;
+      el.classList.add("hide"); res(k || null);
+    };
+  });
+}
+async function msgMenu(id, from, deleted) {
+  const opts = [{ k: "me", label: "Delete for me", cls: "" }];
+  if (from === "admin" && !deleted) opts.unshift({ k: "all", label: "Delete for everyone (unsend)", cls: "r" });
+  const k = await askMenu(opts);
+  if (!k || !openId) return;
+  try {
+    if (k === "all") await updateDoc(doc(db, "tickets", openId, "messages", id), { deleted: true, text: "" });
+    else await updateDoc(doc(db, "tickets", openId, "messages", id), { hiddenAdmin: true });
+  } catch (e) { alert("Failed: " + (e.code || e.message)); }
+}
+$("tkClear").onclick = async () => {
+  if (!openId || !confirm("Clear this chat for you? (User keeps their copy)")) return;
+  try {
+    const snap = await getDocs(collection(db, "tickets", openId, "messages"));
+    const batch = writeBatch(db);
+    snap.docs.forEach((d) => batch.update(d.ref, { hiddenAdmin: true }));
+    await batch.commit();
+  } catch (e) { alert("Failed: " + (e.code || e.message)); }
 };
 
 // ---------- devices ----------
